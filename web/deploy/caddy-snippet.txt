@@ -1,0 +1,9 @@
+    # ---- reborn 错题本 ----
+    @reborn_root path /reborn
+    @reborn_path path /reborn/*
+
+    redir @reborn_root /reborn/ 308
+
+    handle @reborn_path {
+      reverse_proxy reborn-app:3000
+    }

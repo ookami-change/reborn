@@ -1,4 +1,6 @@
+# esbuild / unrs-resolver 只被 drizzle-kit、eslint 这些开发期工具使用，
+# 构建镜像时不需要它们的原生二进制；sharp 走预编译包，也不需要执行构建脚本。
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: false
   sharp: false
   unrs-resolver: false
