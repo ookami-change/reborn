@@ -16,12 +16,22 @@ export type CardState = {
   status: "learning" | "mastered";
 };
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/* 复习日期是"日历日"，必须按本地时区算。
+ * 用 toISOString() 取的是 UTC 日期：东八区 0 点到 8 点之间会整整差一天，
+ * 导致"明天复习"排到今天、到期判断错位。容器时区见 Dockerfile 的 TZ。 */
+function localDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export const today = () => localDate(new Date());
 
 export function addDays(days: number, from = new Date()): string {
   const d = new Date(from);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 /** 新错题的初始状态：第 1 档，明天复习 */

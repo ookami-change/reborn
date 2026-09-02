@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { db, schema } from "@/lib/db";
 import { key, getObject, putObject } from "@/lib/storage";
 import type { Box } from "@/lib/types";
+import { initialState } from "@/lib/leitner";
 
 export const runtime = "nodejs";
 
@@ -83,13 +84,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
 
       // 新错题进第 1 档，明天复习（PRD FR-4）
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const init = initialState();
       await tx.insert(schema.mistakeCard).values({
         problemId: p.id,
         childId: cap.childId,
-        boxLevel: 1,
-        nextDueDate: tomorrow.toISOString().slice(0, 10),
+        boxLevel: init.boxLevel,
+        nextDueDate: init.nextDueDate,
+        consecutiveCorrect: init.consecutiveCorrect,
+        status: init.status,
       });
 
       ids.push(p.id);

@@ -20,6 +20,8 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# 复习日期按本地日历日计算，容器默认 UTC 会整整差一天
+ENV TZ=Asia/Shanghai
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 COPY --from=build /app/.next/standalone ./

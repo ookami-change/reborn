@@ -329,6 +329,8 @@ if len(due) < MIN_ITEMS:
 
 用 `pdf-lib` 在服务端渲染。
 
+**中文字体必须内嵌**：pdf-lib 的内置标准字体不含中文字形，孩子姓名与「221 棵」这类答案会渲染失败。项目内置 `assets/NotoSansSC-Regular.otf`，经 `@pdf-lib/fontkit` 以子集方式嵌入（只打包实际用到的字形，生成的 PDF 仍然很小）。
+
 ### 6.1 版式参数
 
 | 参数 | 值 |
@@ -411,6 +413,8 @@ interface Detector {
 | VLM | 阿里云百炼 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI 兼容格式，可直接用 openai sdk 改 baseURL |
 | VLM | 火山方舟 | `https://ark.cn-beijing.volces.com/api/v3` | **需先在控制台创建「推理接入点」，请求中填 endpoint id 而非模型名** |
 | VLM | 智谱 | `https://open.bigmodel.cn/api/paas/v4` | GLM-4V 系列 |
+
+**不使用境外模型**（含 Anthropic / OpenAI 等）。除合规原因外，这是项目的明确选型约束。
 
 具体模型 ID 以各厂商控制台当前在售版本为准。
 

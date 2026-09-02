@@ -10,7 +10,11 @@ const t = (name, got, want) => {
   ok ? pass++ : fail++;
   console.log(`${ok ? "✅" : "❌"} ${name}${ok ? "" : `\n     得到 ${JSON.stringify(got)}\n     期望 ${JSON.stringify(want)}`}`);
 };
-const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n); return x.toISOString().slice(0,10); };
+// 与 lib/leitner.ts 一致：按本地日历日算，不能用 toISOString（那是 UTC）
+const d = (n) => {
+  const x = new Date(); x.setDate(x.getDate() + n);
+  return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+};
 
 // 连续答对 5 次 → 已掌握
 let c = initialState();
