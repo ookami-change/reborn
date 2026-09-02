@@ -13,6 +13,18 @@ cd "$APP_DIR"
 [ -f .env.server ] || { echo "缺少 $APP_DIR/.env.server"; exit 1; }
 set -a; . ./.env.server; set +a
 
+# 必填项校验。曾因 .env.server 里缺 DETECT_MODE 而静默走了 noop 检出，
+# 表现是"接口正常返回 0 个框"，很难排查——宁可启动就失败。
+for v in PG_USER PG_PASSWORD PG_DB COS_BUCKET TENCENT_SECRET_ID BASE_URL; do
+  [ -n "${!v:-}" ] || { echo "环境变量 $v 未设置"; exit 1; }
+done
+if [ "${DETECT_MODE:-none}" = "vlm" ]; then
+  for v in VLM_BASE_URL VLM_API_KEY VLM_MODEL; do
+    [ -n "${!v:-}" ] || { echo "DETECT_MODE=vlm 但 $v 未设置"; exit 1; }
+  done
+fi
+echo "==> 检出模式: ${DETECT_MODE:-none}${VLM_MODEL:+ ($VLM_MODEL)}"
+
 # ---- Postgres：只在 docker 网络内可见，不映射公网端口 ----
 if ! docker ps -a --format '{{.Names}}' | grep -qx "$PG_NAME"; then
   echo "==> 创建 Postgres 容器"

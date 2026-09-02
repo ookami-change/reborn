@@ -22,22 +22,35 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
   const [details, setDetails] = useState<Record<string, Detail>>({});
   const [cursor, setCursor] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     fetch(apiUrl(`/api/captures/${id}`))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("找不到这次拍摄"))))
       .then((d) => {
         setImageUrl(d.imageUrl);
-        if (d.detectedBoxes) {
-          setBoxes(
-            d.detectedBoxes.map((b: Box, i: number) => ({
-              ...b,
-              id: `d${i}`,
-              origin: "detected" as const,
-              wrong: false,
-            })),
-          );
-        }
+        if (d.marked) return;
+        // 自动切题耗时约 10 秒，放后台跑：家长可以立刻手动圈，
+        // 框到了再铺上去，任何失败都静默降级为纯手动
+        setDetecting(true);
+        fetch(apiUrl(`/api/captures/${id}/detect`), { method: "POST" })
+          .then((r) => r.json())
+          .then((r) => {
+            const bs: Box[] = r.boxes ?? [];
+            if (bs.length) {
+              setBoxes((prev) => [
+                ...bs.map((b, i) => ({
+                  ...b,
+                  id: `d${i}`,
+                  origin: "detected" as const,
+                  wrong: false,
+                })),
+                ...prev,
+              ]);
+            }
+          })
+          .catch(() => {})
+          .finally(() => setDetecting(false));
       })
       .catch((e) => setLoadError(e.message));
   }, [id]);
@@ -170,7 +183,12 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
         />
         {boxes.length === 0 && (
           <p className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-xs text-neutral-500">
-            点一下错题所在的位置就能圈出来 · 双指缩放
+            {detecting ? "正在自动找题，也可以直接点一下自己圈" : "点一下错题所在的位置就能圈出来 · 双指缩放"}
+          </p>
+        )}
+        {detecting && boxes.length > 0 && (
+          <p className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-xs text-neutral-500">
+            正在自动找题…
           </p>
         )}
       </div>
