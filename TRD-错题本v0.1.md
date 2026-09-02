@@ -56,7 +56,21 @@
 | 图片处理 | `sharp` | 服务端压缩、裁剪 |
 | PDF 生成 | `pdf-lib` | 纯 JS，可嵌入 JPEG/PNG。**不要用 puppeteer**，在 serverless 环境过重 |
 | 二维码 | `qrcode` | 生成 PNG 后嵌入 PDF |
-| 前端图片交互 | `react-konva` 或原生 Canvas | 圈题页专用 |
+| 前端图片交互 | 原生 DOM + Pointer Events | 已实现，见 `web/components/MarkCanvas.tsx`。不需要 Konva |
+
+#### 实测版本（2026-09-02 已装）
+
+`next@16.3.4` / `react@19.2.8` / `tailwindcss@4.3.3` / Node 25。此版本有两处与旧写法不同，写代码前请注意：
+
+1. **动态路由的 `params` 是 Promise**，必须 await：
+   ```ts
+   export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
+     const { code } = await params;
+   }
+   ```
+2. `web/AGENTS.md` 由 `next dev` 自动生成并要求：写代码前先读 `node_modules/next/dist/docs/` 下对应文档，不要凭旧版本记忆写。该文件随仓库提交，不要删。
+
+Route Handlers 的约定与旧版一致：`app/**/route.ts` 导出 `GET`/`POST` 等具名函数，默认不缓存。
 
 ---
 

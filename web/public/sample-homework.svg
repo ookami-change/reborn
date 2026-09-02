@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1100" width="800" height="1100" font-family="'PingFang SC','Hiragino Sans GB',sans-serif">
+  <rect width="800" height="1100" fill="#fdfdfa"/>
+  <g stroke="#dfe6dd" stroke-width="1">
+    <line x1="60" y1="0" x2="60" y2="1100"/>
+    <line x1="740" y1="0" x2="740" y2="1100"/>
+  </g>
+  <text x="60" y="60" font-size="22" font-weight="600" fill="#333">四年级数学 · 练习七</text>
+  <text x="600" y="60" font-size="16" fill="#888">2026.9.2</text>
+  <line x1="60" y1="78" x2="740" y2="78" stroke="#333" stroke-width="1.5"/>
+
+  <text x="60" y="120" font-size="17" font-weight="600" fill="#333">一、直接写出得数。</text>
+  <g font-size="19" fill="#333">
+    <text x="80"  y="165">1. 37 + 45 =</text><text x="240" y="165" fill="#2b4a8b" font-family="cursive">82</text>
+    <text x="330" y="165">2. 6 × 7 =</text>  <text x="460" y="165" fill="#2b4a8b" font-family="cursive">49</text>
+    <text x="540" y="165">3. 90 ÷ 5 =</text> <text x="680" y="165" fill="#2b4a8b" font-family="cursive">18</text>
+    <text x="80"  y="215">4. 125 × 8 =</text><text x="250" y="215" fill="#2b4a8b" font-family="cursive">1000</text>
+    <text x="330" y="215">5. 48 ÷ 6 =</text> <text x="470" y="215" fill="#2b4a8b" font-family="cursive">8</text>
+    <text x="540" y="215">6. 15 × 4 =</text> <text x="680" y="215" fill="#2b4a8b" font-family="cursive">62</text>
+  </g>
+  <path d="M455 148 l16 22 M471 148 l-16 22" stroke="#d43b30" stroke-width="2.5" fill="none"/>
+  <path d="M675 198 l16 22 M691 198 l-16 22" stroke="#d43b30" stroke-width="2.5" fill="none"/>
+
+  <text x="60" y="285" font-size="17" font-weight="600" fill="#333">二、竖式计算。</text>
+  <g font-size="20" fill="#333" font-family="monospace">
+    <text x="110" y="330">  246</text><text x="110" y="356">× 	 3</text>
+    <line x1="105" y1="366" x2="205" y2="366" stroke="#333"/>
+    <text x="110" y="392" fill="#2b4a8b">  738</text>
+    <text x="360" y="330">  504</text><text x="360" y="356">−  87</text>
+    <line x1="355" y1="366" x2="455" y2="366" stroke="#333"/>
+    <text x="360" y="392" fill="#2b4a8b">  427</text>
+    <text x="600" y="330">  81</text><text x="600" y="356">÷  3</text>
+    <line x1="595" y1="366" x2="680" y2="366" stroke="#333"/>
+    <text x="600" y="392" fill="#2b4a8b">  27</text>
+  </g>
+  <path d="M400 378 l16 22 M416 378 l-16 22" stroke="#d43b30" stroke-width="2.5" fill="none"/>
+
+  <text x="60" y="460" font-size="17" font-weight="600" fill="#333">三、解决问题。</text>
+  <g font-size="18" fill="#333">
+    <text x="80" y="500">1. 果园里有苹果树 128 棵，梨树比苹果树少 35 棵。</text>
+    <text x="100" y="528">两种树一共有多少棵？</text>
+    <text x="100" y="566" fill="#2b4a8b" font-family="cursive">128 − 35 = 93（棵）  128 + 93 = 221（棵）</text>
+    <text x="100" y="596" fill="#2b4a8b" font-family="cursive">答：一共有 221 棵。</text>
+
+    <text x="80" y="660">2. 一辆汽车 3 小时行驶 180 千米，照这样计算，</text>
+    <text x="100" y="688">7 小时能行驶多少千米？</text>
+    <text x="100" y="726" fill="#2b4a8b" font-family="cursive">180 ÷ 3 = 60（千米）  60 × 7 = 360（千米）</text>
+    <text x="100" y="756" fill="#2b4a8b" font-family="cursive">答：7 小时行驶 360 千米。</text>
+
+    <text x="80" y="820">3. 学校买了 24 盒粉笔，每盒 12 支，平均分给 8 个班，</text>
+    <text x="100" y="848">每个班分到多少支？</text>
+    <text x="100" y="886" fill="#2b4a8b" font-family="cursive">24 × 12 = 288（支）  288 ÷ 8 = 34（支）</text>
+    <text x="100" y="916" fill="#2b4a8b" font-family="cursive">答：每个班分到 34 支。</text>
+  </g>
+  <path d="M96 700 l18 26 M114 700 l-18 26" stroke="#d43b30" stroke-width="2.5" fill="none"/>
+  <path d="M96 860 l18 26 M114 860 l-18 26" stroke="#d43b30" stroke-width="2.5" fill="none"/>
+  <text x="640" y="1050" font-size="15" fill="#888">第 1 页</text>
+</svg>
