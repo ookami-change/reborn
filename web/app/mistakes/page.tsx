@@ -40,7 +40,8 @@ export default function MistakesPage() {
 
       <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
         {items?.map((m) => (
-          <li key={m.id} className="flex items-center gap-3 px-4 py-3">
+          <li key={m.id}>
+           <Link href={`/mistakes/${m.id}`} className="flex items-center gap-3 px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-900">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={m.cropImageUrl}
@@ -55,6 +56,7 @@ export default function MistakesPage() {
                 {m.status === "mastered" ? "已掌握" : `第 ${m.boxLevel} 档 · ${m.nextDueDate} 复习`}
               </p>
             </div>
+           </Link>
           </li>
         ))}
       </ul>
