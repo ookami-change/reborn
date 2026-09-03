@@ -60,7 +60,10 @@ export const problem = pgTable(
     boxOrigin: text("box_origin").notNull().default("manual"),
     /** detected 的框是否被家长改过尺寸/位置 */
     boxAdjusted: boolean("box_adjusted").notNull().default(false),
-    correctAnswer: text("correct_answer").notNull(),
+    /** 可为空。正确答案对主闭环不是必需的——生成 PDF 要的是题图和遮罩，
+     *  扫码判对错家长对着原卷判，Leitner 状态机根本不碰它。之前设成必填，
+     *  等于逼家长在最不耐烦的时刻逐题打字（痛点§二）。 */
+    correctAnswer: text("correct_answer").notNull().default(""),
     stemText: text("stem_text"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const { results } = (await req.json()) as {
-    results: { problemId: string; verdict: "right" | "wrong" }[];
+    results: { problemId: string; verdict: "right" | "wrong"; correctAnswer?: string }[];
   };
 
   const [sheet] = await db
@@ -55,6 +55,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
         verdict: r.verdict,
         source: "manual",
       });
+
+      // 圈题时没填答案的，家长在这一屏顺手补——此时他手里有原卷和孩子
+      // 重做的，本来就在逐题看，边际成本接近零（痛点§2.4）
+      const answer = r.correctAnswer?.trim();
+      if (answer) {
+        await tx
+          .update(schema.problem)
+          .set({ correctAnswer: answer })
+          .where(eq(schema.problem.id, r.problemId));
+      }
 
       const card = cards.find((c) => c.problemId === r.problemId);
       if (!card) continue;

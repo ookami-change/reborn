@@ -123,11 +123,11 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
             onChange={(m) => setDetail({ masks: m })}
           />
 
-          <Field label="正确答案" required>
+          <Field label="正确答案">
             <input
               value={detail.correctAnswer}
               onChange={(e) => setDetail({ correctAnswer: e.target.value })}
-              placeholder="例如 42"
+              placeholder="可不填，回收时再补"
               className="w-full rounded-lg border border-neutral-300 bg-transparent px-3 py-2.5 text-base outline-none focus:border-red-500 dark:border-neutral-700"
             />
           </Field>
@@ -143,7 +143,7 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
 
         <footer className="shrink-0 border-t border-neutral-200 p-3 dark:border-neutral-800">
           <button
-            disabled={!detail.correctAnswer.trim() || saving}
+            disabled={saving}
             onClick={() => (last ? save() : setCursor(cursor + 1))}
             className="w-full rounded-lg bg-red-600 py-3 text-base font-semibold text-white disabled:bg-neutral-300 dark:disabled:bg-neutral-700"
           >
@@ -164,16 +164,27 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
             已圈 <b className="tabular-nums text-red-600">{wrong.length}</b> 道
           </span>
         </div>
-        <button
-          disabled={wrong.length === 0}
-          onClick={() => {
-            setCursor(0);
-            setStep(2);
-          }}
-          className="rounded-md bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white disabled:bg-neutral-300 dark:disabled:bg-neutral-700"
-        >
-          下一步
-        </button>
+        {/* 主路径是圈完即存。答案挪到扫码回收那一屏顺手补——那时家长
+            手里有原卷和孩子重做的，本来就在逐题看（痛点§2.3） */}
+        <div className="flex items-center gap-2">
+          <button
+            disabled={wrong.length === 0 || saving}
+            onClick={() => {
+              setCursor(0);
+              setStep(2);
+            }}
+            className="rounded-md px-2.5 py-1.5 text-xs text-neutral-500 disabled:opacity-40"
+          >
+            逐题填答案
+          </button>
+          <button
+            disabled={wrong.length === 0 || saving}
+            onClick={save}
+            className="rounded-md bg-red-600 px-3.5 py-1.5 text-xs font-semibold text-white disabled:bg-neutral-300 dark:disabled:bg-neutral-700"
+          >
+            {saving ? "保存中…" : `保存 ${wrong.length} 道`}
+          </button>
+        </div>
       </header>
 
       <div className="relative min-h-0 flex-1">

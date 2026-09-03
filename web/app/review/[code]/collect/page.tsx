@@ -13,6 +13,8 @@ export default function CollectPage({ params }: { params: Promise<{ code: string
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [marks, setMarks] = useState<Record<string, "right" | "wrong">>({});
+  /** 圈题时没填答案的，在这里顺手补（痛点§2.4）。key 是 problemId */
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -53,7 +55,11 @@ export default function CollectPage({ params }: { params: Promise<{ code: string
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          results: sheet.items.map((i) => ({ problemId: i.problemId, verdict: marks[i.problemId] })),
+          results: sheet.items.map((i) => ({
+            problemId: i.problemId,
+            verdict: marks[i.problemId],
+            correctAnswer: answers[i.problemId],
+          })),
         }),
       });
       const d = await res.json();
@@ -99,7 +105,20 @@ export default function CollectPage({ params }: { params: Promise<{ code: string
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={i.cropImageUrl} alt="" className="h-12 w-20 shrink-0 rounded border border-neutral-200 object-cover dark:border-neutral-700" />
                 )}
-                <span className="min-w-0 flex-1 truncate text-sm text-neutral-500">{i.correctAnswer}</span>
+                {i.correctAnswer ? (
+                  <span className="min-w-0 flex-1 truncate text-sm text-neutral-500">
+                    {i.correctAnswer}
+                  </span>
+                ) : (
+                  <input
+                    value={answers[i.problemId] ?? ""}
+                    onChange={(e) =>
+                      setAnswers((a) => ({ ...a, [i.problemId]: e.target.value }))
+                    }
+                    placeholder="补正确答案"
+                    className="min-w-0 flex-1 rounded-md border border-dashed border-neutral-300 bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-solid focus:border-red-500 dark:border-neutral-700"
+                  />
+                )}
                 <div className="flex shrink-0 gap-2">
                   {(["right", "wrong"] as const).map((v) => (
                     <button

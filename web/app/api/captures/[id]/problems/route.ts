@@ -11,7 +11,8 @@ export const runtime = "nodejs";
 type Item = {
   cropBox: Box;
   maskBoxes?: Box[];
-  correctAnswer: string;
+  /** 可选。不填就空着，回收时家长对着孩子重做的顺手补（痛点§2.4） */
+  correctAnswer?: string;
   childAnswer?: string;
   /** 'detected' = 采纳模型的框，'manual' = 家长自己画的（即模型漏检） */
   boxOrigin?: "detected" | "manual";
@@ -27,9 +28,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: "至少要有一道题" }, { status: 400 });
-  }
-  if (items.some((i) => !i.correctAnswer?.trim())) {
-    return NextResponse.json({ error: "每道题都要填正确答案" }, { status: 400 });
   }
 
   const [cap] = await db.select().from(schema.capture).where(eq(schema.capture.id, id)).limit(1);
@@ -69,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           maskBoxes: item.maskBoxes ?? [],
           boxOrigin: item.boxOrigin === "detected" ? "detected" : "manual",
           boxAdjusted: !!item.boxAdjusted,
-          correctAnswer: item.correctAnswer.trim(),
+          correctAnswer: item.correctAnswer?.trim() ?? "",
         })
         .returning({ id: schema.problem.id });
 
