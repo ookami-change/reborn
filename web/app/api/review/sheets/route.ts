@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { count, eq, inArray } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { defaultChildId } from "@/lib/db/seed";
 import { getObject, key, putObject, signedUrl } from "@/lib/storage";
@@ -74,4 +74,27 @@ export async function POST(req: NextRequest) {
     .where(eq(schema.reviewSheet.id, sheet.id));
 
   return NextResponse.json({ sheetId: sheet.id, shortCode, pdfUrl: signedUrl(pdfKey) });
+}
+
+/** 复习卷列表：待回收的在前，用于首页「待回收」入口。 */
+export async function GET() {
+  const rows = await db
+    .select({
+      shortCode: schema.reviewSheet.shortCode,
+      status: schema.reviewSheet.status,
+      createdAt: schema.reviewSheet.createdAt,
+      itemOrder: schema.reviewSheet.itemOrder,
+      pdfKey: schema.reviewSheet.pdfKey,
+    })
+    .from(schema.reviewSheet)
+    .orderBy(desc(schema.reviewSheet.createdAt));
+
+  const items = rows.map((r) => ({
+    shortCode: r.shortCode,
+    status: r.status,
+    createdAt: r.createdAt,
+    itemCount: r.itemOrder.length,
+    pdfUrl: r.pdfKey ? signedUrl(r.pdfKey) : null,
+  }));
+  return NextResponse.json({ items });
 }

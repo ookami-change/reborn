@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
-import { eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { defaultChildId } from "@/lib/db/seed";
-import { key, putObject } from "@/lib/storage";
+import { key, putObject, signedUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -44,4 +44,26 @@ export async function POST(req: NextRequest) {
     .where(eq(schema.capture.id, row.id));
 
   return NextResponse.json({ captureId: row.id });
+}
+
+/** 待整理：拍了还没圈题的作业。复习重做(review_redo)不在此列。 */
+export async function GET() {
+  const rows = await db
+    .select({
+      id: schema.capture.id,
+      imageKey: schema.capture.imageKey,
+      sourceType: schema.capture.sourceType,
+      createdAt: schema.capture.createdAt,
+    })
+    .from(schema.capture)
+    .where(and(eq(schema.capture.marked, false), ne(schema.capture.sourceType, "review_redo")))
+    .orderBy(desc(schema.capture.createdAt));
+
+  const items = rows.map((r) => ({
+    id: r.id,
+    imageUrl: signedUrl(r.imageKey),
+    sourceType: r.sourceType,
+    createdAt: r.createdAt,
+  }));
+  return NextResponse.json({ items });
 }

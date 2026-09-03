@@ -33,18 +33,24 @@ export default function HomePage() {
       <div className="space-y-3 px-5">
         <Card
           href="/review/new"
-          disabled={!d || d.dueCount === 0}
+          disabled={!d || d.learningCount === 0}
           title="今天要复习"
           value={d ? `${d.dueCount} 道` : "…"}
           hint={
-            !d ? "" : d.dueCount > 0 ? "生成复习卷" : "没有到期的题，休息一下"
+            !d
+              ? ""
+              : d.dueCount > 0
+                ? "生成复习卷 ›"
+                : d.learningCount > 0
+                  ? "没有到期的，也可挑几道生成复习卷 ›"
+                  : "还没有复习中的题"
           }
           accent
         />
 
         {d && d.unmarkedCaptureCount > 0 && (
           <Card
-            href="/mistakes"
+            href="/captures"
             title="待整理"
             value={`${d.unmarkedCaptureCount} 张`}
             hint="有作业拍了还没圈题"
