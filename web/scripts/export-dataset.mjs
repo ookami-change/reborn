@@ -20,7 +20,10 @@ const url = process.env.DATABASE_URL;
 if (!url) { console.error("缺少 DATABASE_URL"); process.exit(1); }
 
 const sql = postgres(url, { max: 2 });
-await rm(out, { recursive: true, force: true });
+// 只清产物，不删目录本身——out 常常是 docker 挂载点，rmdir 会 EBUSY
+await rm(path.join(out, "manifest.jsonl"), { force: true });
+await rm(path.join(out, "stats.json"), { force: true });
+await rm(path.join(out, "labels"), { recursive: true, force: true });
 await mkdir(path.join(out, "labels"), { recursive: true });
 
 const captures = await sql`
