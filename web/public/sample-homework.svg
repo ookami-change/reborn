@@ -1,3 +1,4 @@
+<!-- 注意：本 SVG 用了 macOS 字体（PingFang / Hiragino），在没有中文字体的机器（如 Linux 服务器）上栅格化会整页乱码。测试上传请用预渲染好的 sample-homework.jpg，别把这个 SVG 直接喂给服务端 sharp。 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1100" width="800" height="1100" font-family="'PingFang SC','Hiragino Sans GB',sans-serif">
   <rect width="800" height="1100" fill="#fdfdfa"/>
   <g stroke="#dfe6dd" stroke-width="1">
