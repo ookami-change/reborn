@@ -13,6 +13,10 @@ type Item = {
   maskBoxes?: Box[];
   correctAnswer: string;
   childAnswer?: string;
+  /** 'detected' = 采纳模型的框，'manual' = 家长自己画的（即模型漏检） */
+  boxOrigin?: "detected" | "manual";
+  /** detected 的框是否被家长改过 */
+  boxAdjusted?: boolean;
 };
 
 /** 圈题完成：为每道题裁图、建 problem + attempt + mistake_card。
@@ -63,6 +67,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           cropBox: item.cropBox,
           cropImageKey: "",
           maskBoxes: item.maskBoxes ?? [],
+          boxOrigin: item.boxOrigin === "detected" ? "detected" : "manual",
+          boxAdjusted: !!item.boxAdjusted,
           correctAnswer: item.correctAnswer.trim(),
         })
         .returning({ id: schema.problem.id });

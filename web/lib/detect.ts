@@ -12,7 +12,11 @@ import type { Box } from "@/lib/types";
  * 注意该账号 RPM 上限为 3，429 需退避重试。
  */
 
-export type Detector = { detect(jpeg: Buffer): Promise<Box[]> };
+export type Detector = {
+  /** 落库用的模型标识，不是展示名。none = 未启用检出 */
+  name: string;
+  detect(jpeg: Buffer): Promise<Box[]>;
+};
 
 const PROMPT = [
   "这是一张小学数学作业照片。请框出页面上每一道独立的题目（含题号、题干和作答区）。",
@@ -54,6 +58,10 @@ class VlmDetector implements Detector {
     private apiKey: string,
     private model: string,
   ) {}
+
+  get name() {
+    return this.model;
+  }
 
   async detect(jpeg: Buffer): Promise<Box[]> {
     const body = JSON.stringify({
@@ -103,7 +111,7 @@ class VlmDetector implements Detector {
   }
 }
 
-const noop: Detector = { detect: async () => [] };
+const noop: Detector = { name: "none", detect: async () => [] };
 
 export function getDetector(): Detector {
   const mode = process.env.DETECT_MODE ?? "none";

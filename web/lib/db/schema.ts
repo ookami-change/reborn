@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { Box } from "@/lib/types";
+import type { Box, DetectionRun } from "@/lib/types";
 
 /* 表结构对应 TRD §2.1。三张核心表的分离原则见 TRD §2.2：
  * problem（题目身份）/ attempt（每次作答）/ mistake_card（复习状态）必须分开，
@@ -36,6 +36,9 @@ export const capture = pgTable(
     reviewSheetId: uuid("review_sheet_id"),
     /** 是否已完成圈题 */
     marked: boolean("marked").notNull().default(false),
+    /** 自动切题的原始输出（含家长没采纳的框）。检出关闭或失败时为 null。
+     *  这是训练/评测检出模型的唯一数据来源，别只存被采纳的框。 */
+    detectedBoxes: jsonb("detected_boxes").$type<DetectionRun>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("capture_pending_idx").on(t.childId, t.marked, t.createdAt)],
@@ -53,6 +56,10 @@ export const problem = pgTable(
     cropImageKey: text("crop_image_key").notNull(),
     /** 归一化坐标，相对裁剪图。只存坐标，不改图片文件（TRD §5.1） */
     maskBoxes: jsonb("mask_boxes").$type<Box[]>().notNull().default([]),
+    /** 'detected' = 采纳了模型给的框，'manual' = 家长自己画的（即模型漏检） */
+    boxOrigin: text("box_origin").notNull().default("manual"),
+    /** detected 的框是否被家长改过尺寸/位置 */
+    boxAdjusted: boolean("box_adjusted").notNull().default(false),
     correctAnswer: text("correct_answer").notNull(),
     stemText: text("stem_text"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

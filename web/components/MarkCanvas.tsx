@@ -75,9 +75,17 @@ export default function MarkCanvas({
     [stageSize, view.scale],
   );
 
+  /* 拖动/缩放的唯一入口。detected 的框一旦被改，就打上 adjusted——
+   * 这是模型框位置不准的证据，落库后成为框回归的训练样本（痛点§三） */
   const patch = useCallback(
     (id: string, box: Box) => {
-      onChange(boxes.map((b) => (b.id === id ? { ...b, ...clampBox(box) } : b)));
+      onChange(
+        boxes.map((b) =>
+          b.id === id
+            ? { ...b, ...clampBox(box), adjusted: b.origin === "detected" || b.adjusted }
+            : b,
+        ),
+      );
     },
     [boxes, onChange],
   );

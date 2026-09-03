@@ -79,6 +79,9 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
               maskBoxes: d.masks.map(({ x, y, w, h }) => ({ x, y, w, h })),
               correctAnswer: d.correctAnswer,
               childAnswer: d.childAnswer || undefined,
+              // 训练信号：这个框是模型给的还是家长补的、有没有被改过（痛点§三）
+              boxOrigin: b.origin,
+              boxAdjusted: !!b.adjusted,
             };
           }),
         }),
@@ -203,7 +206,13 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
   );
 
   function resize(bid: string, p: Partial<Box>) {
-    setBoxes((bs) => bs.map((b) => (b.id === bid ? { ...b, ...clampBox({ ...b, ...p }) } : b)));
+    setBoxes((bs) =>
+      bs.map((b) =>
+        b.id === bid
+          ? { ...b, ...clampBox({ ...b, ...p }), adjusted: b.origin === "detected" || b.adjusted }
+          : b,
+      ),
+    );
   }
 }
 
