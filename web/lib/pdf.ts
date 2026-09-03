@@ -19,12 +19,24 @@ const PT = {
   pageW: 595,
   pageH: 842,
   margin: 40,
-  headerH: 60,
-  qr: 50,
+  headerH: 76,
+  /** 二维码边长。48 字的回收链接是 33×33 模块，50pt 时单模块只有 0.53mm，
+   *  正好卡在家用打印机的可靠阈值上。扫码是闭环的硬依赖，宁可多占 14pt。 */
+  qr: 64,
   codeW: 24,
   gap: 16,
-  answerRatio: 0.6, // 作答区高度 = 题图高度 × 0.6
+  answerRatio: 0.6, // 作答区高度 = 题图高度 × 0.6，再按下面的上下限钳制
+  /** 下限 12mm：孩子写一行数字的最小高度。
+   *  没有下限时一道口算行的题图只有 34pt 高，作答区就只剩 7.2mm，写不下——
+   *  作答区按题图高度成比例是错的，孩子的字高是固定的，跟题图多高无关。 */
+  answerMin: 34,
+  /** 上限 60mm：再大就是纯浪费纸。大应用题的题图 226pt 高时作答区会到 136pt。 */
+  answerMax: 170,
 };
+
+/** 作答区高度：按题图比例，但钳在一行手写高度和半页之间。导出供测试断言。 */
+export const answerHeight = (imgH: number) =>
+  Math.min(PT.answerMax, Math.max(PT.answerMin, imgH * PT.answerRatio));
 const CONTENT_W = PT.pageW - PT.margin * 2; // 515
 const IMAGE_W = CONTENT_W - PT.codeW - 8; // 483
 
@@ -82,19 +94,19 @@ export async function renderReviewSheet(opts: {
 
   const dateText = new Date().toLocaleDateString("zh-CN");
   let page = doc.addPage([PT.pageW, PT.pageH]);
-  let y = drawHeader(page, font, qrImg, opts.childName, opts.shortCode, dateText);
+  let y = drawHeader(page, font, qrImg, opts.childName, opts.shortCode, dateText, opts.collectUrl);
   let onPage = 0;
 
   for (const item of opts.items) {
     const img = await doc.embedJpg(item.jpeg);
     const scale = IMAGE_W / img.width;
     const imgH = img.height * scale;
-    const blockH = imgH + imgH * PT.answerRatio + PT.gap;
+    const blockH = imgH + answerHeight(imgH) + PT.gap;
 
     // 放不下就换页，绝不截断题目
     if (onPage >= opts.perPage || y - blockH < PT.margin) {
       page = doc.addPage([PT.pageW, PT.pageH]);
-      y = drawHeader(page, font, qrImg, opts.childName, opts.shortCode, dateText);
+      y = drawHeader(page, font, qrImg, opts.childName, opts.shortCode, dateText, opts.collectUrl);
       onPage = 0;
     }
 
@@ -121,7 +133,7 @@ export async function renderReviewSheet(opts: {
     }
 
     // 作答区：一条底线，其余留白
-    const answerH = imgH * PT.answerRatio;
+    const answerH = answerHeight(imgH);
     page.drawLine({
       start: { x: imgX, y: imgY - answerH + 4 },
       end: { x: imgX + IMAGE_W, y: imgY - answerH + 4 },
@@ -133,12 +145,15 @@ export async function renderReviewSheet(opts: {
     onPage++;
   }
 
-  if (opts.withAnswerPage) {
+  // 正确答案是可选的：没填的题不占答案页的行，一道都没有就整页不生成，
+  // 否则印出来是一列光秃秃的题号（痛点§2.4）
+  const answered = opts.items.filter((i) => i.correctAnswer.trim());
+  if (opts.withAnswerPage && answered.length) {
     const ap = doc.addPage([PT.pageW, PT.pageH]);
     let ay = PT.pageH - PT.margin;
     drawText(ap, font, `${opts.shortCode} 答案`, { x: PT.margin, y: ay - 16, size: 14 });
     ay -= 40;
-    for (const item of opts.items) {
+    for (const item of answered) {
       if (ay < PT.margin) break;
       drawText(ap, font, `${item.code}    ${item.correctAnswer}`, {
         x: PT.margin,
@@ -159,6 +174,7 @@ function drawHeader(
   childName: string,
   shortCode: string,
   dateText: string,
+  collectUrl: string,
 ): number {
   const top = PT.pageH - PT.margin;
   drawText(page, font, `${childName} · ${shortCode} · ${dateText}`, {
@@ -166,6 +182,14 @@ function drawHeader(
     y: top - 12,
     size: 11,
     color: rgb(0.3, 0.3, 0.3),
+  });
+  // 扫码失败时的退路。没有这一行，二维码扫不出来家长就完全无法录结果，
+  // 整个闭环断在最后一步。
+  drawText(page, font, collectUrl, {
+    x: PT.margin,
+    y: top - 26,
+    size: 7,
+    color: rgb(0.6, 0.6, 0.6),
   });
   page.drawImage(qr, {
     x: PT.pageW - PT.margin - PT.qr,
