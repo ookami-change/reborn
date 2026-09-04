@@ -15,7 +15,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     id: row.id,
     imageUrl: signedUrl(row.imageKey),
     marked: row.marked,
-    // 自动切题尚未接入，返回 null 让前端降级为纯手动模式
-    detectedBoxes: null,
+    // 已经跑过检出就直接给结果，不必重跑：一次要 12 秒，还占一个 RPM 额度
+    // （账号上限只有 3）。没跑过或跑失败时为 null，前端再触发 POST /detect。
+    detectedBoxes: row.detectedBoxes?.boxes ?? null,
   });
 }

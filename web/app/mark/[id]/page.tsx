@@ -24,31 +24,33 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
   const [saving, setSaving] = useState(false);
   const [detecting, setDetecting] = useState(false);
 
+  /** 把模型给的框铺上去。origin=detected 是训练信号，落库后用于评估
+   *  召回与虚检（痛点§三），所以这里必须标对。 */
+  const overlay = (bs: Box[]) => {
+    if (!bs.length) return;
+    setBoxes((prev) => [
+      ...bs.map((b, i) => ({ ...b, id: `d${i}`, origin: "detected" as const, wrong: false })),
+      ...prev,
+    ]);
+  };
+
   useEffect(() => {
     apiFetch(`/api/captures/${id}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("找不到这次拍摄"))))
       .then((d) => {
         setImageUrl(d.imageUrl);
         if (d.marked) return;
+        // 之前跑过就直接用，别再花 12 秒和一个 RPM 额度重跑
+        if (d.detectedBoxes?.length) {
+          overlay(d.detectedBoxes);
+          return;
+        }
         // 自动切题耗时约 10 秒，放后台跑：家长可以立刻手动圈，
         // 框到了再铺上去，任何失败都静默降级为纯手动
         setDetecting(true);
         apiFetch(`/api/captures/${id}/detect`, { method: "POST" })
           .then((r) => r.json())
-          .then((r) => {
-            const bs: Box[] = r.boxes ?? [];
-            if (bs.length) {
-              setBoxes((prev) => [
-                ...bs.map((b, i) => ({
-                  ...b,
-                  id: `d${i}`,
-                  origin: "detected" as const,
-                  wrong: false,
-                })),
-                ...prev,
-              ]);
-            }
-          })
+          .then((r) => overlay(r.boxes ?? []))
           .catch(() => {})
           .finally(() => setDetecting(false));
       })
