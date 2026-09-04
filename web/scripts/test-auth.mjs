@@ -36,15 +36,27 @@ ok(!verifyToken(t2), "换 SESSION_SECRET 后旧 token 失效");
 process.env.SESSION_SECRET = "test-secret-at-least-16-chars";
 
 // 过期
-const old = issueToken(AID, Date.now() - 31 * 24 * 3600 * 1000);
+const old = issueToken(AID, undefined, Date.now() - 31 * 24 * 3600 * 1000);
 ok(!verifyToken(old), "31 天前签发的 token 已过期");
-ok(verifyToken(issueToken(AID, Date.now() - 29 * 24 * 3600 * 1000)), "29 天前签发的仍有效");
+ok(verifyToken(issueToken(AID, undefined, Date.now() - 29 * 24 * 3600 * 1000)), "29 天前签发的仍有效");
 
 console.log("口令");
 ok(checkPassword("correct horse battery staple"), "正确口令通过");
 ok(!checkPassword("wrong"), "错误口令不通过");
 ok(!checkPassword(""), "空口令不通过");
 ok(!checkPassword("correct horse battery stapl"), "少一个字符不通过");
+
+console.log("监护人同意版本");
+{
+  const { POLICY_VERSION } = await import("../lib/auth.ts");
+  ok(verifyToken(issueToken(AID))?.cv === undefined, "未同意时 token 里没有 cv");
+  ok(verifyToken(issueToken(AID, POLICY_VERSION))?.cv === POLICY_VERSION, "同意后 cv 带回正确版本");
+  const t3 = issueToken(AID, POLICY_VERSION);
+  const [pl, sg] = t3.split(".");
+  const c3 = JSON.parse(Buffer.from(pl, "base64url").toString());
+  const fake = Buffer.from(JSON.stringify({ ...c3, cv: "9999-99-99" })).toString("base64url");
+  ok(!verifyToken(`${fake}.${sg}`), "伪造 cv 绕过同意 → 签名不符，不通过");
+}
 
 console.log("magic link token");
 const toks = new Set(Array.from({ length: 200 }, () => newJoinToken()));

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { cookieMaxAge, cookieName, issueToken } from "@/lib/auth";
+import { POLICY_VERSION, cookieMaxAge, cookieName, issueToken } from "@/lib/auth";
+import { hasConsented } from "@/lib/consent";
 import { childIdFor } from "@/lib/db/seed";
 
 export const runtime = "nodejs";
@@ -40,7 +41,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     .where(eq(schema.account.id, acc.id));
 
   const res = NextResponse.redirect(home);
-  res.cookies.set(cookieName, issueToken(acc.id), {
+  const cv = (await hasConsented(acc.id)) ? POLICY_VERSION : undefined;
+  res.cookies.set(cookieName, issueToken(acc.id, cv), {
     httpOnly: true,
     sameSite: "lax",
     secure: false, // 站点是 http，设 true 浏览器不回传。上 TLS 后改

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCOUNT_HEADER, cookieName, verifyToken } from "@/lib/auth";
+import { ACCOUNT_HEADER, POLICY_VERSION, cookieName, verifyToken } from "@/lib/auth";
 
 /* 全站鉴权网关（T9 / T9b）
  *
@@ -30,6 +30,20 @@ export function proxy(req: NextRequest) {
   const session = verifyToken(req.cookies.get(cookieName)?.value);
   if (session) {
     headers.set(ACCOUNT_HEADER, session.aid);
+
+    /* 未同意当前版本条款的，除同意页本身外一律拦下（T12）。
+     * 版本在签过名的 cookie 里，这里零数据库开销——proxy 每个请求都要跑。 */
+    const consented = session.cv === POLICY_VERSION;
+    const onConsent = pathname === "/consent" || pathname === "/api/consent";
+    if (!consented && !onConsent) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "需要先同意条款", consent: true }, { status: 403 });
+      }
+      const url = req.nextUrl.clone();
+      url.pathname = "/consent";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next({ request: { headers } });
   }
 
