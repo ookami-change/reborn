@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { signedUrl } from "@/lib/storage";
+import { currentChildId } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ code: s
   const [sheet] = await db
     .select()
     .from(schema.reviewSheet)
-    .where(eq(schema.reviewSheet.shortCode, code.toUpperCase()))
+  /* 必须带 childId：短码是 R01/R02 这种连号，**可以枚举**。
+   * 只按短码查 = 输个 R08 就能读到甚至改掉别家的复习卷。 */
+    .where(
+      and(
+        eq(schema.reviewSheet.shortCode, code.toUpperCase()),
+        eq(schema.reviewSheet.childId, await currentChildId()),
+      ),
+    )
     .limit(1);
   if (!sheet) return NextResponse.json({ error: "找不到这张卷" }, { status: 404 });
 

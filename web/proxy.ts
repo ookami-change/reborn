@@ -1,26 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cookieName, verifyToken } from "@/lib/auth";
+import { ACCOUNT_HEADER, cookieName, verifyToken } from "@/lib/auth";
 
-/* 全站鉴权网关（T9）
+/* 全站鉴权网关（T9 / T9b）
  *
- * Next 16 里 middleware.ts 已废弃并改名为 proxy.ts，且默认跑在 Node.js
+ * Next 16 里 middleware.ts 已废弃并改名 proxy.ts，且默认跑在 Node.js
  * runtime（15.x 时是 Edge），所以这里可以直接用 node:crypto 验签。
  *
  * 页面未登录 → 302 到 /login 并带上 next 参数；
  * 接口未登录 → 401 JSON，让前端自己跳，不要给 fetch 返回一个登录页 HTML。
+ *
+ * 校验通过后把账号 id 放进请求头传给路由——这是官方文档给的传值方式
+ * （proxy 与渲染代码不共享模块和全局变量）。
  */
 
 /** 不需要登录就能访问的路径。注意这里的 pathname 已经不含 basePath。 */
-const PUBLIC = ["/login", "/api/auth/login"];
+const PUBLIC = ["/login", "/api/auth/login", "/join"];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // 无论如何先删掉外部传进来的账号头，杜绝伪造
+  const headers = new Headers(req.headers);
+  headers.delete(ACCOUNT_HEADER);
+
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers } });
   }
-  if (verifyToken(req.cookies.get(cookieName)?.value)) {
-    return NextResponse.next();
+
+  const session = verifyToken(req.cookies.get(cookieName)?.value);
+  if (session) {
+    headers.set(ACCOUNT_HEADER, session.aid);
+    return NextResponse.next({ request: { headers } });
   }
 
   if (pathname.startsWith("/api/")) {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { defaultChildId } from "@/lib/db/seed";
+import { currentChildId } from "@/lib/session";
 import { key, putObject, signedUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   }
 
   const sourceType = String(form.get("sourceType") ?? "homework");
-  const childId = await defaultChildId();
+  const childId = await currentChildId();
 
   // 统一压到最长边 2000px / JPEG q85，控制存储与后续处理成本（TRD §5.1）
   const raw = Buffer.from(await file.arrayBuffer());
@@ -56,7 +56,13 @@ export async function GET() {
       createdAt: schema.capture.createdAt,
     })
     .from(schema.capture)
-    .where(and(eq(schema.capture.marked, false), ne(schema.capture.sourceType, "review_redo")))
+    .where(
+      and(
+        eq(schema.capture.childId, await currentChildId()),
+        eq(schema.capture.marked, false),
+        ne(schema.capture.sourceType, "review_redo"),
+      ),
+    )
     .orderBy(desc(schema.capture.createdAt));
 
   const items = rows.map((r) => ({

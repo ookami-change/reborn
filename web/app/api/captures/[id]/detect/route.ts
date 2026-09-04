@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { getObject } from "@/lib/storage";
 import { getDetector } from "@/lib/detect";
+import { currentChildId } from "@/lib/session";
 import type { DetectionRun } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -14,7 +15,11 @@ export const maxDuration = 120;
  *  **全部**框，包括家长后来没采纳的。只存被采纳的框就永远算不出虚检和召回率。 */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [cap] = await db.select().from(schema.capture).where(eq(schema.capture.id, id)).limit(1);
+  const [cap] = await db
+    .select()
+    .from(schema.capture)
+    .where(and(eq(schema.capture.id, id), eq(schema.capture.childId, await currentChildId())))
+    .limit(1);
   if (!cap) return NextResponse.json({ error: "拍摄记录不存在" }, { status: 404 });
 
   const detector = getDetector();

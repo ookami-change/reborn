@@ -1,21 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { applyAttempt, type CardState } from "@/lib/leitner";
+import { currentChildId } from "@/lib/session";
 
 export const runtime = "nodejs";
 
 /** 回收重做结果：写作答记录 + 推进 Leitner 档位（PRD FR-6） */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const { results } = (await req.json()) as {
-    results: { problemId: string; verdict: "right" | "wrong"; correctAnswer?: string }[];
-  };
+  const { results } = ((await req.json().catch(() => ({}))) as {
+    results?: { problemId: string; verdict: "right" | "wrong"; correctAnswer?: string }[];
+  }) ?? {};
 
   const [sheet] = await db
     .select()
     .from(schema.reviewSheet)
-    .where(eq(schema.reviewSheet.shortCode, code.toUpperCase()))
+  /* 必须带 childId：短码是 R01/R02 这种连号，**可以枚举**。
+   * 只按短码查 = 输个 R08 就能读到甚至改掉别家的复习卷。 */
+    .where(
+      and(
+        eq(schema.reviewSheet.shortCode, code.toUpperCase()),
+        eq(schema.reviewSheet.childId, await currentChildId()),
+      ),
+    )
     .limit(1);
   if (!sheet) return NextResponse.json({ error: "找不到这张卷" }, { status: 404 });
   if (sheet.status === "collected") {

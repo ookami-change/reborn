@@ -17,8 +17,40 @@ import type { Box, DetectionRun } from "@/lib/types";
  * problem（题目身份）/ attempt（每次作答）/ mistake_card（复习状态）必须分开，
  * 掌握状态要能由 attempt 序列推导，不能是唯一事实来源。 */
 
+/* 一个家庭一个 account（T9b）。
+ *
+ * 登录方式是 magic link：每个家庭一条不可猜的长随机串链接，点开即绑定会话，
+ * 零注册摩擦、天然数据隔离、不用短信也不用密码（《试用分发方案》§六）。
+ * 代价是链接被转发出去等于账号泄露——5–10 个家庭的试用范围内可接受。 */
+export const account = pgTable("account", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** 家庭标识，只给我自己看，如「小明家」 */
+  name: text("name").notNull(),
+  /** magic link 的随机串。撤销一个家庭的访问 = 改掉它 */
+  joinToken: text("join_token").notNull().unique(),
+  /** owner 账号走口令登录，其余走 magic link */
+  isOwner: boolean("is_owner").notNull().default(false),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  /** 软删除（T7）。合规要求可删除，且要能恢复误删 */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** 监护人同意记录（T7）。出事时这是唯一证据，所以只增不改。 */
+export const consentLog = pgTable("consent_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id").notNull().references(() => account.id),
+  /** 'agree' | 'withdraw' */
+  action: text("action").notNull(),
+  /** 协议版本，改了条款要能区分谁同意的是哪一版 */
+  policyVersion: text("policy_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const child = pgTable("child", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** 数据隔离的根。所有查询都必须经由 child 收敛到 account（TRD §3.0） */
+  accountId: uuid("account_id").references(() => account.id),
   name: text("name").notNull(),
   grade: integer("grade").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -39,6 +71,8 @@ export const capture = pgTable(
     /** 自动切题的原始输出（含家长没采纳的框）。检出关闭或失败时为 null。
      *  这是训练/评测检出模型的唯一数据来源，别只存被采纳的框。 */
     detectedBoxes: jsonb("detected_boxes").$type<DetectionRun>(),
+    /** 原图保存期限（T7）。到期后由清理任务删除对象存储里的文件 */
+    retentionUntil: timestamp("retention_until", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("capture_pending_idx").on(t.childId, t.marked, t.createdAt)],
@@ -65,6 +99,8 @@ export const problem = pgTable(
      *  等于逼家长在最不耐烦的时刻逐题打字（痛点§二）。 */
     correctAnswer: text("correct_answer").notNull().default(""),
     stemText: text("stem_text"),
+    /** 软删除（T7）。家长删错题不物理删除，保留可恢复 */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("problem_child_idx").on(t.childId, t.createdAt)],
@@ -115,6 +151,8 @@ export const reviewSheet = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     childId: uuid("child_id").notNull().references(() => child.id),
     /** 'R07'，印在卷面上用于回收 */
+    /** 'R07'，印在卷面上。**只在同一个孩子内唯一**——多账号下全局唯一会撞键，
+     *  而且按短码全局查找是越权入口，查询必须带 childId（TRD §3.0） */
     shortCode: text("short_code").notNull(),
     /** 题目与顺序持久化，保证同一张卷可重复生成完全相同的 PDF（PRD FR-5） */
     itemOrder: jsonb("item_order").$type<SheetItem[]>().notNull(),
@@ -125,5 +163,5 @@ export const reviewSheet = pgTable(
     status: text("status").notNull().default("generated"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("sheet_code_idx").on(t.shortCode)],
+  (t) => [uniqueIndex("sheet_code_idx").on(t.childId, t.shortCode)],
 );

@@ -24,6 +24,7 @@
 | §6 | 中文**不内嵌字体**，改画字形轮廓；作答区高度改为钳制 |
 | §7 | 路线 A（OCR 题号锚点）**未实现**，实际只有路线 B |
 | §8 | 部署平台改为腾讯云轻量服务器 + Docker + Caddy |
+| §3.0 | 已按家庭隔离数据（T9b），登录改为 magic link + owner 口令 |
 | §10 | 9 项全部完成，后续开发项见 §11 |
 
 代码约定见 `web/AGENTS.md`：**这是 Next 16，很多 API 与训练数据里的不一样，
@@ -106,8 +107,29 @@ Route Handlers 的约定与旧版一致：`app/**/route.ts` 导出 `GET`/`POST` 
 ### 2.1 DDL
 
 ```sql
+-- 一个家庭一个 account。数据隔离的根（§3.0）
+CREATE TABLE account (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         text NOT NULL,          -- 家庭标识，只给运营者看
+  join_token   text NOT NULL UNIQUE,   -- magic link 的随机串，改掉它即撤销访问
+  is_owner     boolean NOT NULL DEFAULT false,  -- owner 走口令登录
+  last_seen_at timestamptz NULL,
+  deleted_at   timestamptz NULL,       -- 软删除（T7）
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+-- 监护人同意记录（T7）。出事时这是唯一证据，只增不改
+CREATE TABLE consent_log (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id     uuid NOT NULL REFERENCES account(id),
+  action         text NOT NULL,   -- 'agree'|'withdraw'
+  policy_version text NOT NULL,   -- 改了条款要能区分谁同意的是哪一版
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE child (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  account_id  uuid REFERENCES account(id),   -- 隔离的根，见 §3.0
   name        text NOT NULL,
   grade       int  NOT NULL,
   created_at  timestamptz NOT NULL DEFAULT now()
@@ -122,6 +144,7 @@ CREATE TABLE capture (
   review_sheet_id  uuid NULL REFERENCES review_sheet(id),
   marked           boolean NOT NULL DEFAULT false,  -- 是否已完成圈题
   detected_boxes   jsonb NULL,   -- 自动切题的完整结果，见下方说明
+  retention_until  timestamptz NULL,  -- 原图保存期限（T7），到期由清理任务删除
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON capture (child_id, marked, created_at DESC);
@@ -138,6 +161,7 @@ CREATE TABLE problem (
   box_origin         text  NOT NULL DEFAULT 'manual',-- 'detected'|'manual'
   box_adjusted       boolean NOT NULL DEFAULT false, -- detected 的框是否被家长改过
   stem_text          text  NULL,       -- v0.1 留空，OCR 接入后填充
+  deleted_at         timestamptz NULL, -- 软删除（T7）
   created_at         timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON problem (child_id, created_at DESC);
@@ -171,7 +195,7 @@ CREATE INDEX ON mistake_card (child_id, status, next_due_date);
 CREATE TABLE review_sheet (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   child_id    uuid NOT NULL REFERENCES child(id),
-  short_code  text NOT NULL UNIQUE,   -- 'R07'
+  short_code  text NOT NULL,          -- 'R07'。唯一性是 (child_id, short_code)，见 §3.0
   item_order  jsonb NOT NULL,         -- [{seq:1, problem_id:"...", code:"01"}, ...]
   per_page    int  NOT NULL DEFAULT 5,
   with_answer_page boolean NOT NULL DEFAULT true,
@@ -179,7 +203,14 @@ CREATE TABLE review_sheet (
   status      text NOT NULL DEFAULT 'generated',  -- 'generated'|'collected'
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX ON review_sheet (child_id, short_code);
 ```
+
+**软删除为什么不是物理删除**（T7）
+
+`DELETE /api/mistakes/:id` 只置 `problem.deleted_at`，不物理删。物理删会 cascade
+掉 `attempt`，而那批作答记录是掌握状态可重算的唯一依据（§2.2）。错题卡同时置为
+`mastered` 让它退出复习调度。
 
 **`correct_answer` 为什么可以为空**
 
@@ -226,29 +257,81 @@ YOLO 标签 + manifest + 统计。
 
 所有接口位于 `/api/*`，返回 JSON。**除 `/api/auth/login` 外全部需要登录**。
 
-### 3.0 鉴权
+### 3.0 鉴权与数据隔离
 
-全站单口令。`proxy.ts`（Next 16 里 `middleware.ts` 已废弃并改名）拦截所有请求：
+两条登录入口，都产出一个**绑定到某个 account 的会话**：
+
+| 入口 | 谁用 | 怎么进 |
+|---|---|---|
+| 口令 `APP_PASSWORD` | 我自己 | `/login` 输口令 → owner 账号 |
+| **magic link** | 试用家长 | `/join/<32 字符随机串>` 点开即登录 → 该家庭的账号 |
+
+magic link 的取舍：零注册摩擦、天然数据隔离、不用短信也不用密码；代价是链接
+被转发出去等于账号泄露，5–10 个家庭的试用范围内可接受（《试用分发方案》§六）。
+撤销某个家庭 = 改掉它的 `join_token`（`deploy/invite.sh revoke "名字"`）。
+
+`proxy.ts`（Next 16 里 `middleware.ts` 已废弃并改名）拦截所有请求：
 
 | 情况 | 响应 |
 |---|---|
 | 已登录 | 放行 |
 | 未登录且访问页面 | 307 → `/login?next=<原路径>` |
 | 未登录且访问接口 | 401 `{"error":"未登录"}` |
-| `/login`、`/api/auth/login`、`_next/static` | 直接放行 |
+| `/login`、`/api/auth/login`、`/join/*`、`_next/static` | 直接放行 |
 
 ```
 POST /api/auth/login
   req: { password: string }
-  res: { ok: true }        + Set-Cookie: reborn_session
+  res: { ok: true }        + Set-Cookie: reborn_session（绑定 owner 账号）
   401  口令错误   429  同一 IP 连续失败 8 次，锁 10 分钟
 
 POST /api/auth/logout
   res: { ok: true }        + 清除 cookie
+
+GET  /join/:token
+  302 → 首页 + Set-Cookie（绑定该家庭的账号）
+  token 无效时 302 → /login，不区分"不存在"和"已撤销"，也不回显 token
 ```
 
-会话 token 是 `<payload>.<HMAC-SHA256>`，payload 里只有过期时间，有效期 30 天
+会话 token 是 `<payload>.<HMAC-SHA256>`，payload 是 `{ aid, exp }`，有效期 30 天
 （扫码回收发生在手机上，每次都要登录会毁掉「扫码即用」这个关键设计）。
+
+**账号 id 怎么传到路由**：`proxy` 验签后写进请求头 `x-reborn-account`，
+路由用 `lib/session.ts` 的 `currentAccountId()` / `currentChildId()` 读。
+这是官方文档给的传值方式——proxy 与渲染代码不共享模块和全局变量。
+proxy **无条件先删掉外部传进来的同名头**，所以客户端伪造无效。
+
+`currentAccountId()` 拿不到值时**抛异常，不降级**。走到那里还没有值只可能是
+proxy 的 matcher 漏了路径，默默降级就等于「看所有人的数据」。
+
+#### 数据隔离的四条规则
+
+四张主表（`capture` / `problem` / `mistake_card` / `review_sheet`）都有 `child_id`，
+`child.account_id` 指向 account。**每一个碰这四张表的查询都必须带 `childId`。**
+
+| 规则 | 为什么 |
+|---|---|
+| 列表查询加 `where child_id = ?` | 漏一处就是把别家的数据显示出来 |
+| **详情/改/删按 `(id, child_id)` 查**，不是只按 id | 只按 id 查 = 任何人拿到 UUID 就能读写别家的数据。这是最常见的越权漏洞 |
+| 查不到时返回 **404 而不是 403** | 403 会泄漏「这个 id 存在，只是不属于你」 |
+| **短码查询必须带 `childId`** | `R01`/`R02` 是连号，**可以枚举**。输个 `R08` 就能读甚至改别家的复习卷 |
+
+短码的唯一索引也从 `(short_code)` 改成 `(child_id, short_code)`——全局唯一在多账号
+下会撞键，因为每个孩子的第一张卷都叫 `R01`。
+
+**实测隔离结果**（B 家的 cookie 直取 owner 的资源）：
+
+| 接口 | B 家 | owner |
+|---|---|---|
+| `GET /api/captures/:id` | 404 | 200 |
+| `POST /api/captures/:id/detect` | 404 | 200 |
+| `POST /api/captures/:id/problems` | 404 | 200 |
+| `GET /api/mistakes/:id` | 404 | 200 |
+| `PATCH /api/mistakes/:id` | 404 | 200 |
+| `GET /api/review/sheets/:code` | 404 | 200 |
+| `POST /api/review/sheets/:code/collect` | 404 | 409 |
+
+改动这一层时**必须重跑这张表**。脚本思路见提交 `T9b`。
 
 **接口一定要返回 401 JSON，不能返回登录页 HTML**，否则前端 `fetch` 拿到的是一坨
 解析不了的东西。客户端统一用 `lib/paths.ts` 的 `apiFetch`，它在 401 时把人送回
@@ -262,9 +345,6 @@ POST /api/auth/logout
 ⚠️ 站点目前走 http（IP 直连无证书），口令与 cookie 明文传输。挡得住误入的人，
 挡不住同网络嗅探。上真实用户前必须先上 TLS，同时把登录 cookie 的 `secure` 改为
 `true`（现在设 `true` 浏览器就不回传，直接登不上）。
-
-⚠️ **共享口令没有按家庭隔离数据**——所有登录者看到同一批错题。自己家用没问题，
-家长群试用前必须做：`account` 表 + `child.account_id` + 每个查询加作用域。
 
 ### 3.1 上传
 
@@ -683,6 +763,7 @@ Caddy 里**不能**再写 `/reborn` → `/reborn/` 的跳转：Next 的 basePath
 | `deploy/sync.sh` | 本地 → 服务器同步并部署。**日常只用这个** |
 | `deploy/deploy.sh` | 在服务器上执行：建库容器、跑迁移、构建镜像、重启 |
 | `deploy/export-dataset.sh` | 导出检出训练集 |
+| `deploy/invite.sh` | 家庭邀请链接：`invite.sh` 列出 / `add "小明家"` 新建 / `revoke "小明家"` 撤销 |
 
 ⚠️ `sync.sh` 用 `rsync --delete`，会删掉服务器上本地没有的文件。**`.env.server`
 只存在于服务器**，曾因忘了排除被整个删掉（14 个变量，靠 `docker inspect reborn-app`
@@ -724,7 +805,8 @@ pnpm test     # 30 条断言
 | 圈题页的图片框选交互 | 🟢 已完成 | 纯 Pointer Events，框是百分比定位的 div 放在带变换的 stage 里，自动跟随缩放 |
 | 检出的 12/12 是**合成图**跑出来的 | 🔴 **未验证** | 必须拿真实作业照片复测，见 §7.4 |
 | Kimi 账号 RPM 上限 3 | 🟡 | 已加 429 退避重试；多家庭并发仍会排队。考虑换本地版面模型 |
-| **共享口令，没有按家庭隔离数据** | 🔴 | 自己家用没问题，家长群试用前必须做 §11 的 T9b |
+| ~~共享口令，没有按家庭隔离数据~~ | 🟢 已修 | magic link + 每个查询按 childId 收敛，7 个接口的越权实测全 404（§3.0） |
+| magic link 被转发出去 = 账号泄露 | 🟡 接受 | 5–10 个家庭的试用范围内可接受。撤销用 `invite.sh revoke` |
 | **站点走 http，口令与 cookie 明文** | 🔴 | 上 TLS，见 §11 的 T11 |
 | 数据模型缺合规字段 | 🟡 | `deleted_at` / `retention_until` / `consent_log`，见 §11 的 T7 |
 | COS 并发取图返回空 Body | 🟡 已缓解 | 见 §5.3。已加重试，调用方仍应避免并发 |
@@ -764,9 +846,11 @@ pnpm test     # 30 条断言
 |---|---|---|---|
 | **T3** | **拿真实作业照片复测检出** | 1 小时 | **最先做**。现在所有检出结论都建立在一张合成图上 |
 | T4 | 本地版面模型（DocLayout-YOLO / PP-Structure）对照测试 | 半天 | T3 之后 |
-| **T9b** | **按家庭隔离数据**：`account` 表 + `child.account_id` + 每个查询加作用域 | 1–2 天 | 家长群试用前 |
-| **T11** | **上 TLS**，并把登录 cookie 的 `secure` 改回 `true` | 半天 | 家长群试用前 |
-| T7 | 合规字段 `deleted_at` / `retention_until` / `consent_log` | 半天 | 家长群试用前 |
+| ~~T9b~~ | ~~按家庭隔离数据~~ | 1–2 天 | ✅ 已完成，见 §3.0 |
+| ~~T7~~ | ~~合规字段~~ | 半天 | ✅ 列已加、软删除已接。**同意流程的 UI 还没做** |
+| **T11** | **上 TLS**，并把登录 cookie 的 `secure` 改回 `true` | 半天 | ⏸ 卡在域名+备案，见《试用分发方案》§四 |
+| T12 | 监护人同意 UI：首次进入时展示条款并写 `consent_log` | 半天 | 家长群试用前 |
+| T13 | 原图到期清理任务（按 `capture.retention_until`） | 半天 | 不急，但列已加好 |
 | T5 | 框住纸上的答案区（零打字补答案） | 半天 | 看 T1 之后家长实际怎么用 |
 | T6 | `correction` 表 + 判定可追溯 | 1 天 | **接批改模型之前** |
 | T8 | 假掌握处理 | —— | 暂不做，攒两个月数据再定 |
@@ -785,5 +869,6 @@ pnpm test     # 30 条断言
 | `模型选型与训练路线.md` | 用哪个模型，什么时候该自己训 |
 | `切题检出测试方案.md` | 检出怎么测（错题召回率 + 虚检数） |
 | `模型准确率基准测试方案.md` | 批改怎么测（coverage–FPR 曲线） |
+| `试用分发方案.md` | **发给家长群前必须读**：域名/备案/HTTPS、微信里的坑、规模控制 |
 | `商业化瓶颈.md` | 合规、获客、成本、单人业余的规模上限 |
 | `系统架构.md` | 为什么这么分层，`Attempt` 接口为什么必须稳定 |

@@ -3,6 +3,7 @@ import { and, asc, eq, gt, isNotNull, lte } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { signedUrl } from "@/lib/storage";
 import { addDays, today } from "@/lib/leitner";
+import { currentChildId } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,10 @@ const UPCOMING_WINDOW = 3; // 天
 /** 到期题 + 即将到期题（用于题数不足时提示补齐，TRD §4.2） */
 export async function GET() {
   const t = today();
-  const learning = eq(schema.mistakeCard.status, "learning");
+  const learning = and(
+    eq(schema.mistakeCard.childId, await currentChildId()),
+    eq(schema.mistakeCard.status, "learning"),
+  );
 
   const pick = (extra: ReturnType<typeof and>) =>
     db

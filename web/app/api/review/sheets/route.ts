@@ -1,23 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { count, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { defaultChildId } from "@/lib/db/seed";
+import { currentChildId } from "@/lib/session";
 import { getObject, key, putObject, signedUrl } from "@/lib/storage";
 import { renderReviewSheet } from "@/lib/pdf";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const { problemIds, perPage = 5, withAnswerPage = true } = (await req.json()) as {
-    problemIds: string[];
+  // 畸形 body 应该是 400 不是 500：解析失败就当成空对象，走下面的校验
+  const { problemIds, perPage = 5, withAnswerPage = true } = ((await req
+    .json()
+    .catch(() => ({}))) as {
+    problemIds?: string[];
     perPage?: number;
     withAnswerPage?: boolean;
-  };
+  }) ?? {};
   if (!Array.isArray(problemIds) || problemIds.length === 0) {
     return NextResponse.json({ error: "至少要选一道题" }, { status: 400 });
   }
 
-  const childId = await defaultChildId();
+  const childId = await currentChildId();
   const [child] = await db.select().from(schema.child).where(eq(schema.child.id, childId)).limit(1);
 
   const rows = await db
@@ -105,6 +108,7 @@ export async function GET() {
       pdfKey: schema.reviewSheet.pdfKey,
     })
     .from(schema.reviewSheet)
+    .where(eq(schema.reviewSheet.childId, await currentChildId()))
     .orderBy(desc(schema.reviewSheet.createdAt));
 
   const items = rows.map((r) => ({

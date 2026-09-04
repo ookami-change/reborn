@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { db, schema } from "@/lib/db";
 import { key, getObject, putObject } from "@/lib/storage";
 import type { Box } from "@/lib/types";
 import { initialState } from "@/lib/leitner";
+import { currentChildId } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -24,13 +25,17 @@ type Item = {
  *  整体在一个事务内完成，capture 标记为已圈题（TRD §3.2）。 */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { items } = (await req.json()) as { items: Item[] };
+  const { items } = ((await req.json().catch(() => ({}))) as { items?: Item[] }) ?? {};
 
   if (!Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: "至少要有一道题" }, { status: 400 });
   }
 
-  const [cap] = await db.select().from(schema.capture).where(eq(schema.capture.id, id)).limit(1);
+  const [cap] = await db
+    .select()
+    .from(schema.capture)
+    .where(and(eq(schema.capture.id, id), eq(schema.capture.childId, await currentChildId())))
+    .limit(1);
   if (!cap) return NextResponse.json({ error: "拍摄记录不存在" }, { status: 404 });
 
   const original = await getObject(cap.imageKey);

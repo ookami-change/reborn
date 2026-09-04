@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { currentChildId } from "@/lib/session";
 import { signedUrl } from "@/lib/storage";
 import { addDays, BOX_INTERVALS, MAX_BOX, today } from "@/lib/leitner";
 
 export const runtime = "nodejs";
+
+/** 归属校验：只按 card.id 查等于任何人拿到 UUID 就能改删别家的错题 */
+const mine = (id: string, childId: string) =>
+  and(eq(schema.mistakeCard.id, id), eq(schema.mistakeCard.childId, childId));
 
 /** id 为 mistake_card.id */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -13,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .select()
     .from(schema.mistakeCard)
     .innerJoin(schema.problem, eq(schema.mistakeCard.problemId, schema.problem.id))
-    .where(eq(schema.mistakeCard.id, id))
+    .where(and(eq(schema.mistakeCard.id, id), eq(schema.mistakeCard.childId, await currentChildId())))
     .limit(1);
   if (!row) return NextResponse.json({ error: "不存在" }, { status: 404 });
 
@@ -51,9 +56,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = (await req.json()) as { correctAnswer?: string; action?: "mark_mastered" | "reset" };
+  const body = (await req.json().catch(() => ({}))) as {
+    correctAnswer?: string;
+    action?: "mark_mastered" | "reset";
+  };
 
-  const [card] = await db.select().from(schema.mistakeCard).where(eq(schema.mistakeCard.id, id)).limit(1);
+  const [card] = await db.select().from(schema.mistakeCard).where(mine(id, await currentChildId())).limit(1);
   if (!card) return NextResponse.json({ error: "不存在" }, { status: 404 });
 
   if (body.correctAnswer?.trim()) {
@@ -86,9 +94,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [card] = await db.select().from(schema.mistakeCard).where(eq(schema.mistakeCard.id, id)).limit(1);
+  const [card] = await db.select().from(schema.mistakeCard).where(mine(id, await currentChildId())).limit(1);
   if (!card) return NextResponse.json({ error: "不存在" }, { status: 404 });
-  // problem 上的外键是 cascade，删题即连带删除作答历史与错题卡
-  await db.delete(schema.problem).where(eq(schema.problem.id, card.problemId));
+  /* 软删除（T7）：合规要求可删除，且要能恢复误删。物理删除会连带 cascade
+   * 掉作答历史，那批数据是掌握状态可重算的唯一依据（TRD §2.2），删不得。
+   * 错题卡一并置为 mastered，让它退出复习调度、不再出现在到期列表里。 */
+  const now = new Date();
+  await db.update(schema.problem).set({ deletedAt: now }).where(eq(schema.problem.id, card.problemId));
+  await db
+    .update(schema.mistakeCard)
+    .set({ status: "mastered", nextDueDate: null, updatedAt: now })
+    .where(eq(schema.mistakeCard.id, id));
   return NextResponse.json({ ok: true });
 }

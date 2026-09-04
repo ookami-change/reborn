@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPassword, cookieMaxAge, cookieName, issueToken } from "@/lib/auth";
+import { ownerAccountId } from "@/lib/db/seed";
 
 export const runtime = "nodejs";
 
@@ -38,8 +39,9 @@ export async function POST(req: NextRequest) {
   }
 
   fails.delete(ip);
+  // 口令登录进的是 owner 账号（我自己家）；试用家长走 /join/<token>
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(cookieName, issueToken(now), {
+  res.cookies.set(cookieName, issueToken(await ownerAccountId(), now), {
     httpOnly: true,
     sameSite: "lax",
     // 站点是 http（IP 直连无证书），设了 secure 浏览器就不会回传，直接登不上。
