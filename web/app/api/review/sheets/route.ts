@@ -50,30 +50,48 @@ export async function POST(req: NextRequest) {
 
   const base = process.env.BASE_URL ?? "http://localhost:3000";
   const bp = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  const pdf = await renderReviewSheet({
-    childName: child?.name ?? "我的孩子",
-    shortCode,
-    collectUrl: `${base}${bp}/review/${shortCode}/collect`,
-    perPage,
-    withAnswerPage,
-    items: await Promise.all(
-      ordered.map(async (p, i) => ({
+
+  /* 上面已插入 sheet 行来占住短码，之后任何一步失败都必须把它删掉，
+   * 否则会留下一张没有 PDF 的"孤儿卷"，照样出现在首页「待回收」里。 */
+  try {
+    // 逐张取图，不用 Promise.all：并发调 COS getObject 会间歇性拿到空 Body
+    // （见 lib/storage.ts 的注释）。图很小，串行的代价可以忽略。
+    const items = [];
+    for (let i = 0; i < ordered.length; i++) {
+      const p = ordered[i];
+      items.push({
         code: itemOrder[i].code,
         jpeg: await getObject(p.cropImageKey),
         maskBoxes: p.maskBoxes,
         correctAnswer: p.correctAnswer,
-      })),
-    ),
-  });
+      });
+    }
 
-  const pdfKey = key("sheet", `${sheet.id}.pdf`);
-  await putObject(pdfKey, pdf, "application/pdf");
-  await db
-    .update(schema.reviewSheet)
-    .set({ pdfKey })
-    .where(eq(schema.reviewSheet.id, sheet.id));
+    const pdf = await renderReviewSheet({
+      childName: child?.name ?? "我的孩子",
+      shortCode,
+      collectUrl: `${base}${bp}/review/${shortCode}/collect`,
+      perPage,
+      withAnswerPage,
+      items,
+    });
 
-  return NextResponse.json({ sheetId: sheet.id, shortCode, pdfUrl: signedUrl(pdfKey) });
+    const pdfKey = key("sheet", `${sheet.id}.pdf`);
+    await putObject(pdfKey, pdf, "application/pdf");
+    await db
+      .update(schema.reviewSheet)
+      .set({ pdfKey })
+      .where(eq(schema.reviewSheet.id, sheet.id));
+
+    return NextResponse.json({ sheetId: sheet.id, shortCode, pdfUrl: signedUrl(pdfKey) });
+  } catch (err) {
+    await db.delete(schema.reviewSheet).where(eq(schema.reviewSheet.id, sheet.id));
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("组卷失败", shortCode, msg);
+    // 一定要带 JSON 体：空体会让前端的 res.json() 抛
+    // "Unexpected end of JSON input"，把真正的原因盖掉。
+    return NextResponse.json({ error: `生成失败：${msg}` }, { status: 500 });
+  }
 }
 
 /** 复习卷列表：待回收的在前，用于首页「待回收」入口。 */

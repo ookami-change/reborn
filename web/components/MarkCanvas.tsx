@@ -21,7 +21,7 @@ type View = { scale: number; tx: number; ty: number };
 
 type Drag =
   | { kind: "pan"; startX: number; startY: number; view: View; moved: boolean }
-  | { kind: "move"; id: string; startX: number; startY: number; box: Box }
+  | { kind: "move"; id: string; startX: number; startY: number; box: Box; moved: boolean }
   | { kind: "resize"; id: string; corner: Corner; startX: number; startY: number; box: Box }
   | null;
 
@@ -144,6 +144,7 @@ export default function MarkCanvas({
         startX: e.clientX,
         startY: e.clientY,
         box: { x: box.x, y: box.y, w: box.w, h: box.h },
+        moved: false,
       };
       return;
     }
@@ -193,7 +194,8 @@ export default function MarkCanvas({
     const { dx, dy } = toNorm(dxPx, dyPx);
 
     if (d.kind === "move") {
-      patch(d.id, { ...d.box, x: d.box.x + dx, y: d.box.y + dy });
+      if (!d.moved && Math.hypot(dxPx, dyPx) > TAP_SLOP) d.moved = true;
+      if (d.moved) patch(d.id, { ...d.box, x: d.box.x + dx, y: d.box.y + dy });
       return;
     }
 
@@ -227,6 +229,14 @@ export default function MarkCanvas({
     const d = dragRef.current;
     dragRef.current = null;
     if (!d) return;
+
+    /* 点在已有框上且没拖动 = 切换是否为错题。
+     * 这是 L1 的核心交互：自动切题只给候选灰框，家长点一下才算圈中。
+     * 拖动(移动/缩放)不改变标记状态，所以调框不会误取消。 */
+    if (d.kind === "move" && !d.moved) {
+      onChange(boxes.map((b) => (b.id === d.id ? { ...b, wrong: !b.wrong } : b)));
+      return;
+    }
 
     /* 空白处未移动 = 点击 → 在该点新建框 */
     if (d.kind === "pan" && !d.moved) {
