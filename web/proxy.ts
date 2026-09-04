@@ -1,0 +1,43 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { cookieName, verifyToken } from "@/lib/auth";
+
+/* 全站鉴权网关（T9）
+ *
+ * Next 16 里 middleware.ts 已废弃并改名为 proxy.ts，且默认跑在 Node.js
+ * runtime（15.x 时是 Edge），所以这里可以直接用 node:crypto 验签。
+ *
+ * 页面未登录 → 302 到 /login 并带上 next 参数；
+ * 接口未登录 → 401 JSON，让前端自己跳，不要给 fetch 返回一个登录页 HTML。
+ */
+
+/** 不需要登录就能访问的路径。注意这里的 pathname 已经不含 basePath。 */
+const PUBLIC = ["/login", "/api/auth/login"];
+
+export function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return NextResponse.next();
+  }
+  if (verifyToken(req.cookies.get(cookieName)?.value)) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  }
+
+  // clone() 保留 basePath，手拼 new URL() 会丢掉 /reborn 前缀
+  const url = req.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = "";
+  // 登录后跳回原地址。只收站内相对路径，避免变成开放重定向
+  url.searchParams.set("next", pathname + req.nextUrl.search);
+  return NextResponse.redirect(url);
+}
+
+export const config = {
+  /* 放行静态资源与图标，其余全部经过校验。
+   * _next/static 与 _next/image 是构建产物，不含用户数据。 */
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};

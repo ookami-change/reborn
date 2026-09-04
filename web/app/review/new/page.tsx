@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
+import { readJson } from "@/lib/http";
 
 type Item = {
   cardId: string;
@@ -24,7 +25,7 @@ export default function NewSheetPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch(apiUrl("/api/review/due"))
+    apiFetch("/api/review/due")
       .then((r) => r.json())
       .then((d) => {
         setDue(d.due);
@@ -51,13 +52,12 @@ export default function NewSheetPage() {
     try {
       const all = [...due, ...upcoming];
       const ordered = all.filter((x) => picked.has(x.problemId)).map((x) => x.problemId);
-      const res = await fetch(apiUrl("/api/review/sheets"), {
+      const res = await apiFetch("/api/review/sheets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ problemIds: ordered, perPage: 5 }),
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "生成失败");
+      const d = await readJson<{ shortCode: string }>(res);
       router.push(`/review/${d.shortCode}/collect`);
     } catch (e) {
       setBusy(false);

@@ -2,7 +2,8 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
+import { readJson } from "@/lib/http";
 
 type Item = { seq: number; code: string; problemId: string; correctAnswer: string; cropImageUrl: string | null };
 type Sheet = { shortCode: string; status: string; pdfUrl: string | null; items: Item[] };
@@ -19,7 +20,7 @@ export default function CollectPage({ params }: { params: Promise<{ code: string
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetch(apiUrl(`/api/review/sheets/${code}`))
+    apiFetch(`/api/review/sheets/${code}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("找不到这张卷"))))
       .then(setSheet)
       .catch((e) => setError(e.message));
@@ -51,7 +52,7 @@ export default function CollectPage({ params }: { params: Promise<{ code: string
   const submit = async () => {
     setBusy(true);
     try {
-      const res = await fetch(apiUrl(`/api/review/sheets/${code}/collect`), {
+      const res = await apiFetch(`/api/review/sheets/${code}/collect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -62,8 +63,7 @@ export default function CollectPage({ params }: { params: Promise<{ code: string
           })),
         }),
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "提交失败");
+      const d = await readJson<Summary>(res);
       setSummary(d);
     } catch (e) {
       setBusy(false);

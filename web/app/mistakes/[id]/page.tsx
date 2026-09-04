@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
 import type { Box } from "@/lib/types";
 
 type Attempt = {
@@ -34,7 +34,7 @@ export default function MistakeDetailPage({ params }: { params: Promise<{ id: st
   const [busy, setBusy] = useState(false);
 
   const load = () =>
-    fetch(apiUrl(`/api/mistakes/${id}`))
+    apiFetch(`/api/mistakes/${id}`)
       .then((r) => r.json())
       .then((x) => { setD(x); setAnswer(x.correctAnswer ?? ""); });
 
@@ -42,7 +42,7 @@ export default function MistakeDetailPage({ params }: { params: Promise<{ id: st
 
   const act = async (body: object) => {
     setBusy(true);
-    await fetch(apiUrl(`/api/mistakes/${id}`), {
+    await apiFetch(`/api/mistakes/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -53,7 +53,7 @@ export default function MistakeDetailPage({ params }: { params: Promise<{ id: st
 
   const remove = async () => {
     if (!confirm("删除这道错题？作答历史一并删除。")) return;
-    await fetch(apiUrl(`/api/mistakes/${id}`), { method: "DELETE" });
+    await apiFetch(`/api/mistakes/${id}`, { method: "DELETE" });
     router.push("/mistakes");
   };
 

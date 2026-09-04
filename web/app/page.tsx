@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch, apiUrl } from "@/lib/paths";
 
 type Home = {
   dueCount: number;
@@ -18,16 +18,27 @@ export default function HomePage() {
   const [d, setD] = useState<Home | null>(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/home")).then((r) => r.json()).then(setD);
+    apiFetch("/api/home").then((r) => r.json()).then(setD);
   }, []);
 
   return (
     <div className="min-h-dvh bg-neutral-50 pb-8 dark:bg-neutral-950">
-      <header className="px-5 pb-4 pt-8">
-        <h1 className="text-2xl font-semibold">今天</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          {new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })}
-        </p>
+      <header className="flex items-start justify-between px-5 pb-4 pt-8">
+        <div>
+          <h1 className="text-2xl font-semibold">今天</h1>
+          <p className="mt-1 text-sm text-neutral-500">
+            {new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })}
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            await apiFetch("/api/auth/logout", { method: "POST" });
+            window.location.href = apiUrl("/login");
+          }}
+          className="mt-1 text-xs text-neutral-400"
+        >
+          退出
+        </button>
       </header>
 
       <div className="space-y-3 px-5">

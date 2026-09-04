@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
 
 type Item = {
   shortCode: string;
@@ -17,7 +17,7 @@ export default function ReviewSheetsPage() {
   const [items, setItems] = useState<Item[] | null>(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/review/sheets"))
+    apiFetch("/api/review/sheets")
       .then((r) => r.json())
       .then((d) => setItems(d.items));
   }, []);

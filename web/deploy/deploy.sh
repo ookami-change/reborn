@@ -15,9 +15,19 @@ set -a; . ./.env.server; set +a
 
 # 必填项校验。曾因 .env.server 里缺 DETECT_MODE 而静默走了 noop 检出，
 # 表现是"接口正常返回 0 个框"，很难排查——宁可启动就失败。
-for v in PG_USER PG_PASSWORD PG_DB COS_BUCKET TENCENT_SECRET_ID BASE_URL; do
+for v in PG_USER PG_PASSWORD PG_DB COS_BUCKET TENCENT_SECRET_ID BASE_URL APP_PASSWORD; do
   [ -n "${!v:-}" ] || { echo "环境变量 $v 未设置"; exit 1; }
 done
+
+# SESSION_SECRET 没有就自动生成一个并写回——它只需要是个稳定的随机串，
+# 没必要让人去想。换掉它等于让所有人重新登录。
+if [ -z "${SESSION_SECRET:-}" ]; then
+  SESSION_SECRET=$(head -c 32 /dev/urandom | base64 | tr -d '=+/' | cut -c1-43)
+  echo "SESSION_SECRET=$SESSION_SECRET" >> .env.server
+  export SESSION_SECRET
+  echo "==> 已生成 SESSION_SECRET 并写入 .env.server"
+fi
+[ ${#SESSION_SECRET} -ge 16 ] || { echo "SESSION_SECRET 至少 16 字符"; exit 1; }
 if [ "${DETECT_MODE:-none}" = "vlm" ]; then
   for v in VLM_BASE_URL VLM_API_KEY VLM_MODEL; do
     [ -n "${!v:-}" ] || { echo "DETECT_MODE=vlm 但 $v 未设置"; exit 1; }

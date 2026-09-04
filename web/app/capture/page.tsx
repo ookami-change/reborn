@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
+import { readJson } from "@/lib/http";
 
 export default function CapturePage() {
   const router = useRouter();
@@ -18,9 +19,8 @@ export default function CapturePage() {
       const fd = new FormData();
       fd.append("file", f);
       fd.append("sourceType", "homework");
-      const res = await fetch(apiUrl("/api/captures"), { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "上传失败");
+      const res = await apiFetch("/api/captures", { method: "POST", body: fd });
+      const data = await readJson<{ captureId: string }>(res);
       router.push(`/mark/${data.captureId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "上传失败");

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import MarkCanvas from "@/components/MarkCanvas";
 import MaskEditor from "@/components/MaskEditor";
 import { Box, MarkedBox, clampBox } from "@/lib/types";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
 
 type Mask = Box & { id: string };
 type Detail = { correctAnswer: string; childAnswer: string; masks: Mask[] };
@@ -25,7 +25,7 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
   const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
-    fetch(apiUrl(`/api/captures/${id}`))
+    apiFetch(`/api/captures/${id}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("找不到这次拍摄"))))
       .then((d) => {
         setImageUrl(d.imageUrl);
@@ -33,7 +33,7 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
         // 自动切题耗时约 10 秒，放后台跑：家长可以立刻手动圈，
         // 框到了再铺上去，任何失败都静默降级为纯手动
         setDetecting(true);
-        fetch(apiUrl(`/api/captures/${id}/detect`), { method: "POST" })
+        apiFetch(`/api/captures/${id}/detect`, { method: "POST" })
           .then((r) => r.json())
           .then((r) => {
             const bs: Box[] = r.boxes ?? [];
@@ -68,7 +68,7 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
   const save = async () => {
     setSaving(true);
     try {
-      const res = await fetch(apiUrl(`/api/captures/${id}/problems`), {
+      const res = await apiFetch(`/api/captures/${id}/problems`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -200,9 +200,13 @@ export default function MarkCapturePage({ params }: { params: Promise<{ id: stri
             {detecting ? "正在自动找题，也可以直接点一下自己圈" : "点一下错题所在的位置就能圈出来 · 双指缩放"}
           </p>
         )}
-        {detecting && boxes.length > 0 && (
+        {boxes.length > 0 && (
           <p className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-xs text-neutral-500">
-            正在自动找题…
+            {detecting
+              ? "正在自动找题…"
+              : wrong.length === 0
+                ? "点一下灰框，把做错的题标成红色"
+                : "灰框=没选中 · 红框=已圈 · 拖角调大小"}
           </p>
         )}
       </div>

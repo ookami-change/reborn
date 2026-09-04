@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
 
 type Item = { id: string; imageUrl: string; sourceType: string; createdAt: string };
 
@@ -11,7 +11,7 @@ export default function PendingCapturesPage() {
   const [items, setItems] = useState<Item[] | null>(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/captures"))
+    apiFetch("/api/captures")
       .then((r) => r.json())
       .then((d) => setItems(d.items));
   }, []);

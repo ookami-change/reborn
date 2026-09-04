@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiUrl } from "@/lib/paths";
+import { apiFetch } from "@/lib/paths";
 
 type Item = {
   id: string;
@@ -17,7 +17,7 @@ export default function MistakesPage() {
   const [items, setItems] = useState<Item[] | null>(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/mistakes"))
+    apiFetch("/api/mistakes")
       .then((r) => r.json())
       .then((d) => setItems(d.items));
   }, []);

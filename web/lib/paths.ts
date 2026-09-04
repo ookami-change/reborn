@@ -4,3 +4,16 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 export const apiUrl = (path: string) => `${BASE}${path}`;
 export const assetUrl = (path: string) => `${BASE}${path}`;
+
+/** 带鉴权处理的 fetch：会话过期时 proxy 返回 401，直接把人送回登录页并
+ *  记住当前位置，否则页面会卡在"加载中…"或弹一个看不懂的错误。 */
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(apiUrl(path), init);
+  if (res.status === 401 && typeof window !== "undefined") {
+    const here = window.location.pathname.slice(BASE.length) + window.location.search;
+    window.location.href = apiUrl(`/login?next=${encodeURIComponent(here)}`);
+    // 让调用方的 await 永远不返回，避免它继续用一个空响应渲染
+    await new Promise(() => {});
+  }
+  return res;
+}

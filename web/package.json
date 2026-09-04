@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node scripts/test-leitner.mjs && node --experimental-strip-types scripts/test-pdf.mjs",
+    "test": "node scripts/test-leitner.mjs && node --experimental-strip-types scripts/test-pdf.mjs && node --experimental-strip-types scripts/test-auth.mjs",
     "preview:sheet": "node --experimental-strip-types scripts/preview-sheet.mjs"
   },
   "dependencies": {
