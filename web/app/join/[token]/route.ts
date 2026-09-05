@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { POLICY_VERSION, cookieMaxAge, cookieName, issueToken } from "@/lib/auth";
+import { POLICY_VERSION, issueToken, sessionCookie } from "@/lib/auth";
 import { hasConsented } from "@/lib/consent";
 import { childIdFor } from "@/lib/db/seed";
 
@@ -42,12 +42,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 
   const res = NextResponse.redirect(home);
   const cv = (await hasConsented(acc.id)) ? POLICY_VERSION : undefined;
-  res.cookies.set(cookieName, issueToken(acc.id, cv), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: false, // 站点是 http，设 true 浏览器不回传。上 TLS 后改
-    path: "/",
-    maxAge: cookieMaxAge,
-  });
+  res.cookies.set(sessionCookie(issueToken(acc.id, cv)));
   return res;
 }

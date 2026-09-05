@@ -1,0 +1,65 @@
+# 三个项目共用一个入口：a-share（根路径）、baby-planet、reborn。
+#
+# 路由抽成 (app) 片段，被域名块和 IP 块各 import 一次，避免两份复制走偏。
+(app) {
+  encode zstd gzip
+
+  @baby_root path /baby-planet
+  @baby_path path /baby-planet/*
+
+  route {
+    handle_path /data/* {
+      root * /srv/data
+      header Cache-Control "no-store"
+      file_server
+    }
+
+    redir @baby_root /baby-planet/ 308
+
+    handle @baby_path {
+      uri strip_prefix /baby-planet
+      reverse_proxy baby-planet-app:3000
+    }
+
+    # ---- reborn 错题本 ----
+    # Next.js 的 basePath 规范化 URL 为无尾斜杠的 /reborn，
+    # 因此这里不能再做 /reborn -> /reborn/ 的跳转，否则与之互相重定向成环。
+    @reborn_path path /reborn /reborn/*
+
+    handle @reborn_path {
+      reverse_proxy reborn-app:3000
+    }
+
+    handle {
+      reverse_proxy a-share-app:3000
+    }
+  }
+
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+
+# 域名：只接管 443。写成 https:// 前缀是刻意的——不加的话这个块会同时占用
+# 80 端口，和下面的 IP 块争同一个 host，是否自动跳转要靠 Caddy 的隐式规则决定。
+# 明确成 HTTPS-only，80 端口的跳转由下面那块显式做，行为不依赖隐式行为。
+# 证书由 Caddy 自动申请并续期（Let's Encrypt，90 天，存在 caddy_data 卷里）。
+https://www.twincle.com.cn, https://twincle.com.cn {
+  import app
+}
+
+# 裸 IP 与其余 Host 仍走 HTTP，保持 a-share / baby-planet 的现有访问方式不变。
+{$APP_ADDRESS} {
+  # 域名走 HTTP 时跳到 HTTPS。必须排除 ACME 验证路径，否则证书永远签不下来：
+  # Let's Encrypt 是通过 http://<域名>/.well-known/acme-challenge/... 来验证的。
+  @domain {
+    host www.twincle.com.cn twincle.com.cn
+    not path /.well-known/acme-challenge/*
+  }
+  redir @domain https://{host}{uri} 308
+
+  import app
+}

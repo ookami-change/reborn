@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
-import { POLICY_VERSION, cookieMaxAge, cookieName, issueToken } from "@/lib/auth";
+import { POLICY_VERSION, issueToken, sessionCookie } from "@/lib/auth";
 import { currentAccountId } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -19,12 +19,6 @@ export async function POST() {
   });
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(cookieName, issueToken(accountId, POLICY_VERSION), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: false, // 站点是 http，设 true 浏览器不回传。上 TLS 后改
-    path: "/",
-    maxAge: cookieMaxAge,
-  });
+  res.cookies.set(sessionCookie(issueToken(accountId, POLICY_VERSION)));
   return res;
 }

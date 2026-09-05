@@ -46,6 +46,17 @@ ok(!checkPassword("wrong"), "错误口令不通过");
 ok(!checkPassword(""), "空口令不通过");
 ok(!checkPassword("correct horse battery stapl"), "少一个字符不通过");
 
+console.log("cookie 属性");
+{
+  const { sessionCookie } = await import("../lib/auth.ts");
+  process.env.BASE_URL = "https://www.twincle.com.cn";
+  const c = sessionCookie("x");
+  ok(c.secure === true && c.httpOnly === true && c.sameSite === "lax",
+     `https 下 secure=${c.secure} httpOnly=${c.httpOnly} sameSite=${c.sameSite}`);
+  process.env.BASE_URL = "http://localhost:3000";
+  ok(sessionCookie("x").secure === false, "本地 http 下 secure=false，否则浏览器不回传就登不上");
+}
+
 console.log("监护人同意版本");
 {
   const { POLICY_VERSION } = await import("../lib/auth.ts");

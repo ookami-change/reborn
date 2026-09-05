@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { POLICY_VERSION, checkPassword, cookieMaxAge, cookieName, issueToken } from "@/lib/auth";
+import { POLICY_VERSION, checkPassword, issueToken, sessionCookie } from "@/lib/auth";
 import { ownerAccountId } from "@/lib/db/seed";
 import { hasConsented } from "@/lib/consent";
 
@@ -45,14 +45,6 @@ export async function POST(req: NextRequest) {
   // 带上已同意的版本：换设备/重新登录不该被要求重新同意
   const cv = (await hasConsented(accountId)) ? POLICY_VERSION : undefined;
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(cookieName, issueToken(accountId, cv, now), {
-    httpOnly: true,
-    sameSite: "lax",
-    // 站点是 http（IP 直连无证书），设了 secure 浏览器就不会回传，直接登不上。
-    // 上 TLS 后这里要改成 true。
-    secure: false,
-    path: "/",
-    maxAge: cookieMaxAge,
-  });
+  res.cookies.set(sessionCookie(issueToken(accountId, cv, now)));
   return res;
 }

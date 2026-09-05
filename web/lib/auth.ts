@@ -10,8 +10,8 @@ import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
  *   ② magic link `/join/<token>` → 该家庭的账号，给试用家长用
  * 会话 token 里带 accountId，所有查询按它收敛（《试用分发方案》§六）。
  *
- * ⚠️ 站点走的是 http（IP 直连没有证书），口令和 cookie 都是明文传输。
- * 这挡得住误入的人，挡不住同网络的嗅探。上真实用户前必须先上 TLS。
+ * cookie 的 secure 由 BASE_URL 推导，不硬编码：线上是 https 必须设 true，
+ * 本地开发是 http://localhost，设了 true 浏览器不回传就登不上。
  */
 
 const COOKIE = "reborn_session";
@@ -94,6 +94,20 @@ export function checkPassword(input: string): boolean {
 
 export const cookieName = COOKIE;
 export const cookieMaxAge = MAX_AGE;
+
+/** 会话 cookie 的统一属性。三处签发（口令 / magic link / 同意）共用，
+ *  避免改了一处漏两处——secure 漏设一次就是明文传输。 */
+export function sessionCookie(token: string) {
+  return {
+    name: COOKIE,
+    value: token,
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: (process.env.BASE_URL ?? "").startsWith("https://"),
+    path: "/",
+    maxAge: MAX_AGE,
+  };
+}
 
 /** 生成一个够用的随机密钥，供 deploy 首次初始化 */
 export const randomSecret = () => randomBytes(32).toString("base64url");

@@ -363,9 +363,9 @@ POST /api/consent
 限流按 `X-Forwarded-For` 的**最右**值分桶：最左那个是客户端自己填的，可以随便
 伪造，按它分桶等于没有限流；最右是我们自己的 Caddy 追加的真实对端地址。
 
-⚠️ 站点目前走 http（IP 直连无证书），口令与 cookie 明文传输。挡得住误入的人，
-挡不住同网络嗅探。上真实用户前必须先上 TLS，同时把登录 cookie 的 `secure` 改为
-`true`（现在设 `true` 浏览器就不回传，直接登不上）。
+会话 cookie 的属性集中在 `lib/auth.ts` 的 `sessionCookie()`——三处签发共用，
+`secure` **由 `BASE_URL` 是否以 https 开头推导**，不硬编码：线上必须 true，
+本地开发是 `http://localhost` 设了 true 浏览器不回传就登不上。
 
 ### 3.1 上传
 
@@ -729,7 +729,8 @@ Next.js API Route（服务端）
 
 ```
 DATABASE_URL=                 # postgres://user:pass@host:5432/db
-BASE_URL=                     # 复习卷二维码里写死的前缀，必须是孩子手机能访问到的
+BASE_URL=                     # 复习卷二维码里写死的前缀，也决定 cookie 的 secure 标志
+                              # 线上：https://www.twincle.com.cn
 NEXT_PUBLIC_BASE_PATH=        # 挂在 Caddy 子路径下时填 /reborn，本地留空
 
 COS_BUCKET=                   # 腾讯云 COS，不是 S3
@@ -761,15 +762,28 @@ PG_USER= PG_PASSWORD= PG_DB=  # 仅 deploy.sh 用，用来拼 DATABASE_URL
 Railway / Fly.io 没有采用——那是境外，与「作业图片不出境」的约束冲突。
 
 ```
-Caddy (80/443)
+https://www.twincle.com.cn        （Caddy 自动申请 / 续期 Let's Encrypt 证书）
   ├─ path /reborn /reborn/*  → reborn-app:3000
   └─ 其余                     → 同机的其他项目
+http (:80)                        域名 308 跳 HTTPS；裸 IP 仍可用
 reborn-app  (Next standalone, output: "standalone")
 reborn-db   (postgres:17-alpine，**不映射公网端口**，只在 docker 网络内可见)
 ```
 
 同机还跑着别的生产项目，共用 `a-share-net` 网络与同一个 Caddy 入口。
-**改 Caddyfile 前先备份**，备份在 `/opt/a-share-sector-pilot/deploy/Caddyfile.bak.*`。
+**改 Caddyfile 前先备份**，备份在 `/opt/a-share-sector-pilot/deploy/Caddyfile.*`。
+
+#### HTTPS 的三个坑（2026-09-05 配置时踩的）
+
+| 坑 | 说明 |
+|---|---|
+| 域名块要写 `https://` 前缀 | 不写的话它会同时占用 80 端口，和 IP 块争同一个 host，是否自动跳转要看 Caddy 的隐式规则。写成 HTTPS-only，80 端口的跳转由 IP 块显式做 |
+| **跳转必须排除 ACME 验证路径** | Let's Encrypt 是访问 `http://<域名>/.well-known/acme-challenge/...` 验证的，把它一起 308 到 https 会导致证书**永远签不下来** |
+| 校验时要带上 `APP_ADDRESS` | `caddy validate` 时不设这个环境变量，`{$APP_ADDRESS}` 展开成空串，报「server block without any key」 |
+
+路由抽成 `(app)` 片段被两个块各 `import` 一次，避免维护两份走偏。
+证书存在 `caddy_data` 卷里——**不能用临时目录**，否则每次重建容器都重签，
+会撞穿 Let's Encrypt 每域名每周 5 张的限额。
 
 Caddy 里**不能**再写 `/reborn` → `/reborn/` 的跳转：Next 的 basePath 会把
 `/reborn/` 规范化回 `/reborn`，两者互相重定向成环。用一个匹配器
@@ -828,7 +842,7 @@ pnpm test     # 30 条断言
 | Kimi 账号 RPM 上限 3 | 🟡 | 已加 429 退避重试；多家庭并发仍会排队。考虑换本地版面模型 |
 | ~~共享口令，没有按家庭隔离数据~~ | 🟢 已修 | magic link + 每个查询按 childId 收敛，7 个接口的越权实测全 404（§3.0） |
 | magic link 被转发出去 = 账号泄露 | 🟡 接受 | 5–10 个家庭的试用范围内可接受。撤销用 `invite.sh revoke` |
-| **站点走 http，口令与 cookie 明文** | 🔴 | 上 TLS，见 §11 的 T11 |
+| ~~站点走 http，口令与 cookie 明文~~ | 🟢 已修 | `https://www.twincle.com.cn`，Let's Encrypt 自动续期；cookie 已带 `Secure` |
 | 数据模型缺合规字段 | 🟡 | `deleted_at` / `retention_until` / `consent_log`，见 §11 的 T7 |
 | COS 并发取图返回空 Body | 🟡 已缓解 | 见 §5.3。已加重试，调用方仍应避免并发 |
 | 字体文件被 gitignore | 🟢 已写明 | README 有下载命令 |
@@ -869,7 +883,7 @@ pnpm test     # 30 条断言
 | T4 | 本地版面模型（DocLayout-YOLO / PP-Structure）对照测试 | 半天 | T3 之后 |
 | ~~T9b~~ | ~~按家庭隔离数据~~ | 1–2 天 | ✅ 已完成，见 §3.0 |
 | ~~T7~~ | ~~合规字段~~ | 半天 | ✅ 列已加、软删除已接。**同意流程的 UI 还没做** |
-| **T11** | **上 TLS**，并把登录 cookie 的 `secure` 改回 `true` | 半天 | ⏸ 卡在域名+备案，见《试用分发方案》§四 |
+| ~~T11~~ | ~~上 TLS~~ | 半天 | ✅ 已完成 |
 | ~~T12~~ | ~~监护人同意 UI~~ | 半天 | ✅ 已完成，见 §3.0 |
 | T13 | 原图到期清理任务（按 `capture.retention_until`） | 半天 | 不急，但列已加好 |
 | T5 | 框住纸上的答案区（零打字补答案） | 半天 | 看 T1 之后家长实际怎么用 |
