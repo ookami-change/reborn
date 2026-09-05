@@ -13,7 +13,7 @@
 
 ## 0. 本文档的状态
 
-**v0.1 已全部实现并上线**（https://www.twincle.com.cn/reborn ）。本文档已按实际代码回填，
+**v0.1 已全部实现并上线**（http://124.223.185.175/reborn ，域名备案中，见 §8.3）。本文档已按实际代码回填，
 可直接作为接手开发的依据。与初版设计不一致的地方都在对应章节标注了「实际」与原因。
 
 | 章节 | 与初版设计的差异 |
@@ -26,7 +26,7 @@
 | §8 | 部署平台改为腾讯云轻量服务器 + Docker + Caddy |
 | §3.0 | 已按家庭隔离数据（T9b），登录改为 magic link + owner 口令 |
 | §3.0 | **拦路的监护人同意页（T12）已撤销**，改成不拦路的 `/about` 数据说明；新增自助领取 `/claim` 与专属入口 `/setup/<token>`（T14） |
-| §8 | 已上 HTTPS（T11），域名 www.twincle.com.cn，Caddy 自动签 Let's Encrypt |
+| §8 | HTTPS 已配好（T11），但**域名未备案被阻断**，当前退回裸 IP 明文 HTTP，见 §8.3 |
 | §10 | 9 项全部完成，后续开发项见 §11 |
 
 代码约定见 `web/AGENTS.md`：**这是 Next 16，很多 API 与训练数据里的不一样，
@@ -834,6 +834,36 @@ Caddy 里**不能**再写 `/reborn` → `/reborn/` 的跳转：Next 的 basePath
 
 不建议 Vercel：serverless 有执行时长上限（免费档 10 秒），VLM 调用和 PDF 生成都会超时。
 
+### 8.3 ⚠️ 域名未备案，当前实际走的是裸 IP 明文 HTTP
+
+上面那套 HTTPS **配好了但用不上**。2026-09-05 实测：
+
+| 测试 | 结果 |
+|---|---|
+| `http://www.twincle.com.cn/...` | 返回「没完成备案」拦截页 |
+| `https://www.twincle.com.cn/...` | 被 RST 打断（`tcpdump` 抓到 58 个 SYN / 50 个 RST） |
+| `http://124.223.185.175/...` | 通 |
+| 手机 / 电脑、蜂窝 / WiFi | 无差别 —— 是域名级阻断，不是线路问题 |
+
+HTTPS 下 Host 是加密的，中间设备看不到域名，所以只能对整条连接注入 RST；
+浏览器表现为 `ERR_CONNECTION_RESET`，且因为是概率性注入，会时好时坏。
+**排查时不要被「偶尔能开」误导。**
+
+当前对策：`BASE_URL` 改回 `http://124.223.185.175`，代码一行没动
+（`sessionCookie` 的 `secure` 由 `BASE_URL` 推导，跟着自动降级；复习卷二维码
+里的地址也来自它，所以**改过之后旧卷子上的二维码失效**）。
+备案通过后把 `BASE_URL` 改回域名重新部署即恢复。
+
+明文期间的降级，接手时要知道：
+
+| 能力 | 明文 HTTP 下 |
+|---|---|
+| 会话 cookie | 不带 `Secure`（带了浏览器就不接受，会登不上） |
+| 安卓「加到桌面」 | 降级成书签快捷方式 —— Service Worker 要求安全上下文，`navigator.serviceWorker` 直接是 `undefined`（代码里用了可选链，不会崩） |
+| iOS「加到桌面」 | 仍然可用，不受安全上下文限制 |
+| `/setup` 的复制按钮 | `navigator.clipboard` 不存在，走 catch 里的「选中让用户长按复制」兜底 |
+| `/about` 的传输安全一节 | 已如实改成「目前是明文 HTTP，没有加密」。**备案通过后记得改回来** |
+
 **部署脚本**
 
 | 脚本 | 作用 |
@@ -885,7 +915,7 @@ pnpm test     # 30 条断言
 | Kimi 账号 RPM 上限 3 | 🟡 | 已加 429 退避重试；多家庭并发仍会排队。考虑换本地版面模型 |
 | ~~共享口令，没有按家庭隔离数据~~ | 🟢 已修 | magic link + 每个查询按 childId 收敛，7 个接口的越权实测全 404（§3.0） |
 | magic link 被转发出去 = 账号泄露 | 🟡 接受 | 5–10 个家庭的试用范围内可接受。撤销用 `invite.sh revoke` |
-| ~~站点走 http，口令与 cookie 明文~~ | 🟢 已修 | `https://www.twincle.com.cn`，Let's Encrypt 自动续期；cookie 已带 `Secure` |
+| 站点走 http，口令与 cookie 明文 | 🔴 **回退** | HTTPS 配好了但域名未备案被阻断，只能走裸 IP。备案通过后改 `BASE_URL` 即恢复，代码不用动 |
 | 数据模型缺合规字段 | 🟡 | `deleted_at` / `retention_until` / `consent_log`，见 §11 的 T7 |
 | COS 并发取图返回空 Body | 🟡 已缓解 | 见 §5.3。已加重试，调用方仍应避免并发 |
 | 字体文件被 gitignore | 🟢 已写明 | README 有下载命令 |

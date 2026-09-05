@@ -36,7 +36,9 @@ export default function AboutPage() {
       </Item>
 
       <Item title="传输安全">
-        网站走 HTTPS，照片和登录状态在网络上是加密的。
+        <b>目前是明文 HTTP，没有加密。</b>域名还在备案，备案通过之前只能用 IP 直连，
+        证书签不下来。同一个 WiFi 下有人抓包，理论上能看到照片和你的登录状态。
+        备案完成后会换回 HTTPS。所以这段时间只发给几个熟人试用。
       </Item>
 
       <Item title="你的登录链接">
