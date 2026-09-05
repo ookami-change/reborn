@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { POLICY_VERSION, issueToken, sessionCookie } from "@/lib/auth";
-import { hasConsented } from "@/lib/consent";
+import { issueToken, sessionCookie } from "@/lib/auth";
 import { childIdFor } from "@/lib/db/seed";
 
 export const runtime = "nodejs";
@@ -41,7 +40,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     .where(eq(schema.account.id, acc.id));
 
   const res = NextResponse.redirect(home);
-  const cv = (await hasConsented(acc.id)) ? POLICY_VERSION : undefined;
-  res.cookies.set(sessionCookie(issueToken(acc.id, cv)));
+  res.cookies.set(sessionCookie(issueToken(acc.id)));
   return res;
 }

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCOUNT_HEADER, POLICY_VERSION, cookieName, verifyToken } from "@/lib/auth";
+import { ACCOUNT_HEADER, cookieName, verifyToken } from "@/lib/auth";
 
 /* 全站鉴权网关（T9 / T9b）
  *
@@ -13,8 +13,12 @@ import { ACCOUNT_HEADER, POLICY_VERSION, cookieName, verifyToken } from "@/lib/a
  * （proxy 与渲染代码不共享模块和全局变量）。
  */
 
-/** 不需要登录就能访问的路径。注意这里的 pathname 已经不含 basePath。 */
-const PUBLIC = ["/login", "/api/auth/login", "/join"];
+/** 不需要登录就能访问的路径。注意这里的 pathname 已经不含 basePath。
+ *
+ *  /claim 与 /setup 是自助领取的入口（《试用分发方案》§六 方案 B）：
+ *  家长第一次点开时当然还没有会话，拦下来就没人能领了。
+ *  /setup/<token> 只凭那条不可猜的 token 显示"加到桌面"的说明，不读任何错题数据。 */
+const PUBLIC = ["/login", "/api/auth/login", "/join", "/claim", "/api/claim", "/setup"];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -30,20 +34,6 @@ export function proxy(req: NextRequest) {
   const session = verifyToken(req.cookies.get(cookieName)?.value);
   if (session) {
     headers.set(ACCOUNT_HEADER, session.aid);
-
-    /* 未同意当前版本条款的，除同意页本身外一律拦下（T12）。
-     * 版本在签过名的 cookie 里，这里零数据库开销——proxy 每个请求都要跑。 */
-    const consented = session.cv === POLICY_VERSION;
-    const onConsent = pathname === "/consent" || pathname === "/api/consent";
-    if (!consented && !onConsent) {
-      if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "需要先同意条款", consent: true }, { status: 403 });
-      }
-      const url = req.nextUrl.clone();
-      url.pathname = "/consent";
-      url.search = "";
-      return NextResponse.redirect(url);
-    }
     return NextResponse.next({ request: { headers } });
   }
 
@@ -62,6 +52,8 @@ export function proxy(req: NextRequest) {
 
 export const config = {
   /* 放行静态资源与图标，其余全部经过校验。
-   * _next/static 与 _next/image 是构建产物，不含用户数据。 */
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+   * _next/static 与 _next/image 是构建产物，不含用户数据。
+   * sw.js 和 icon-*.png 必须匿名可取：浏览器判定"能不能装到桌面"时会去拉它们，
+   * 拿到 302 登录页就当作不可安装。 */
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|apple-icon|icon-192.png|icon-512.png|sw.js).*)"],
 };

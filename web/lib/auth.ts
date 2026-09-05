@@ -31,25 +31,11 @@ function sign(payload: string): string {
   return b64u(createHmac("sha256", secret()).update(payload).digest());
 }
 
-/** 监护人同意的条款版本。改条款就改这里，所有人会被要求重新同意。 */
-export const POLICY_VERSION = "2026-09-04";
-
-export type Session = {
-  aid: string;
-  exp: number;
-  /** 已同意的条款版本。与 POLICY_VERSION 不符即视为未同意。
-   *  放在签过名的 cookie 里，proxy 判断时零数据库开销——它每次请求都要跑，
-   *  不能为了这个查库。DB 里的 consent_log 才是记录本身，这里只是快路径。 */
-  cv?: string;
-};
+export type Session = { aid: string; exp: number };
 
 /** 生成会话 token：<payload>.<签名>。payload 里是账号 id 和过期时间。 */
-export function issueToken(accountId: string, consentVersion?: string, now = Date.now()): string {
-  const claim: Session = {
-    aid: accountId,
-    exp: Math.floor(now / 1000) + MAX_AGE,
-    ...(consentVersion ? { cv: consentVersion } : {}),
-  };
+export function issueToken(accountId: string, now = Date.now()): string {
+  const claim: Session = { aid: accountId, exp: Math.floor(now / 1000) + MAX_AGE };
   const payload = b64u(Buffer.from(JSON.stringify(claim)));
   return `${payload}.${sign(payload)}`;
 }
@@ -69,7 +55,7 @@ export function verifyToken(token: string | undefined, now = Date.now()): Sessio
     const c = JSON.parse(Buffer.from(payload, "base64url").toString()) as Partial<Session>;
     if (typeof c.exp !== "number" || c.exp <= Math.floor(now / 1000)) return null;
     if (typeof c.aid !== "string" || !c.aid) return null;
-    return { aid: c.aid, exp: c.exp, ...(typeof c.cv === "string" ? { cv: c.cv } : {}) };
+    return { aid: c.aid, exp: c.exp };
   } catch {
     return null;
   }

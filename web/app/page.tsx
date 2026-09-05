@@ -30,15 +30,17 @@ export default function HomePage() {
             {new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })}
           </p>
         </div>
-        <button
-          onClick={async () => {
-            await apiFetch("/api/auth/logout", { method: "POST" });
-            window.location.href = apiUrl("/login");
-          }}
-          className="mt-1 text-xs text-neutral-400"
-        >
-          退出
-        </button>
+        <div className="mt-1 flex items-center gap-3 text-xs text-neutral-400">
+          <Link href="/about">数据说明</Link>
+          <button
+            onClick={async () => {
+              await apiFetch("/api/auth/logout", { method: "POST" });
+              window.location.href = apiUrl("/login");
+            }}
+          >
+            退出
+          </button>
+        </div>
       </header>
 
       <div className="space-y-3 px-5">

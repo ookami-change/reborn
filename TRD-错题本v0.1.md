@@ -13,7 +13,7 @@
 
 ## 0. 本文档的状态
 
-**v0.1 已全部实现并上线**（http://124.223.185.175/reborn ）。本文档已按实际代码回填，
+**v0.1 已全部实现并上线**（https://www.twincle.com.cn/reborn ）。本文档已按实际代码回填，
 可直接作为接手开发的依据。与初版设计不一致的地方都在对应章节标注了「实际」与原因。
 
 | 章节 | 与初版设计的差异 |
@@ -25,6 +25,8 @@
 | §7 | 路线 A（OCR 题号锚点）**未实现**，实际只有路线 B |
 | §8 | 部署平台改为腾讯云轻量服务器 + Docker + Caddy |
 | §3.0 | 已按家庭隔离数据（T9b），登录改为 magic link + owner 口令 |
+| §3.0 | **拦路的监护人同意页（T12）已撤销**，改成不拦路的 `/about` 数据说明；新增自助领取 `/claim` 与专属入口 `/setup/<token>`（T14） |
+| §8 | 已上 HTTPS（T11），域名 www.twincle.com.cn，Caddy 自动签 Let's Encrypt |
 | §10 | 9 项全部完成，后续开发项见 §11 |
 
 代码约定见 `web/AGENTS.md`：**这是 Next 16，很多 API 与训练数据里的不一样，
@@ -114,11 +116,13 @@ CREATE TABLE account (
   join_token   text NOT NULL UNIQUE,   -- magic link 的随机串，改掉它即撤销访问
   is_owner     boolean NOT NULL DEFAULT false,  -- owner 走口令登录
   last_seen_at timestamptz NULL,
+  claimed_at   timestamptz NULL,       -- 非空 = 群链接自助领的（§3.0），空 = 手动建的
   deleted_at   timestamptz NULL,       -- 软删除（T7）
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
--- 监护人同意记录（T7）。出事时这是唯一证据，只增不改
+-- 监护人同意记录（T7）。目前没有拦路的同意页（改成了不拦路的 /about 数据说明），
+-- 表保留：将来要正式记录同意时不用再做数据迁移
 CREATE TABLE consent_log (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id     uuid NOT NULL REFERENCES account(id),
@@ -277,8 +281,11 @@ magic link 的取舍：零注册摩擦、天然数据隔离、不用短信也不
 | 已登录 | 放行 |
 | 未登录且访问页面 | 307 → `/login?next=<原路径>` |
 | 未登录且访问接口 | 401 `{"error":"未登录"}` |
-| `/login`、`/api/auth/login`、`/join/*`、`_next/static` | 直接放行 |
-| 已登录但未同意条款 | 页面 302 → `/consent`；接口 403（见下） |
+| `/login`、`/api/auth/login`、`/join/*`、`/claim`、`/api/claim`、`/setup/*` | 直接放行 |
+| `_next/static`、`_next/image`、`favicon.ico`、`apple-icon.png`、`icon-{192,512}.png`、`sw.js` | matcher 直接不覆盖 |
+
+后三项静态文件**必须匿名可取**：浏览器判定「这个站能不能装到桌面」时会去拉
+manifest 里的图标和 service worker，拿到 302 登录页就当作不可安装。
 
 ```
 POST /api/auth/login
@@ -305,25 +312,52 @@ proxy **无条件先删掉外部传进来的同名头**，所以客户端伪造�
 `currentAccountId()` 拿不到值时**抛异常，不降级**。走到那里还没有值只可能是
 proxy 的 matcher 漏了路径，默默降级就等于「看所有人的数据」。
 
-#### 监护人同意（T12）
+#### 自助领取与专属入口（T14）
 
-未同意当前版本条款的账号，除 `/consent` 与 `/api/consent` 外一律拦下：页面 302 到
-同意页，接口返回 `403 {"consent":true}`（前端 `apiFetch` 见到 403 就跳同意页）。
-
-**已同意的版本放在签过名的 cookie 里**（`Session.cv`），不是每次查库——proxy 每个
-请求都要跑，不能为它引入一次数据库往返。`POST /api/consent` 写完 `consent_log`
-后重新签发 cookie 把版本带上；`/login` 与 `/join` 也会查一次已有同意并带上，
-所以换设备不会被要求重新同意。`consent_log` 只增不改，它才是记录本身。
-
-改条款就改 `POLICY_VERSION`，所有人会被要求重新同意。
-
-同意页文案的原则：**如实说清楚**，不写「我们承诺保护您的隐私」这种空话。
-尤其是「照片会发给月之暗面（Kimi）的模型接口」这一条——不写就是隐瞒。
+群里发的是同一条 `/claim?c=<暗号>`，点开自助开一个账号（《试用分发方案》§六）。
+拦路的同意页已经去掉了，改成不拦路的 `/about` 数据说明，从首页角落链过去。
+原则不变：**如实说清楚**，不写「我们承诺保护您的隐私」这种空话，尤其是
+「照片会发给月之暗面（Kimi）的模型接口」这一条——不写就是隐瞒。
+`consent_log` 表保留，将来要正式记录同意时不用再迁移。
 
 ```
-POST /api/consent
-  res: { ok: true }   写入 consent_log + 重签 cookie
+POST /api/claim
+  req: { name: string, code?: string }
+  res: { token: string }     新账号的 join_token，前端整页跳到 /setup/<token>
+  400  没填称呼
+  403  领取已关闭 / 暗号不对 / 名额已满
+  429  同 IP 一小时内 20 次请求，或 3 次成功开户
+
+GET  /setup/:token                        专属入口页，匿名可访问
+GET  /setup/:token/manifest.webmanifest   该家庭专属的 PWA manifest
 ```
+
+门禁逻辑抽在 `lib/claim.ts` 的纯函数 `claimGate()` 里，由 `scripts/test-auth.mjs`
+直接打——写错的后果是陌生人无限开户，不能只存在于路由里。三道门禁：
+
+| 门禁 | 环境变量 | 防的是 |
+|---|---|---|
+| 总开关 + 名额上限 | `CLAIM_LIMIT`，**默认 0 = 关闭** | 兜底。破了前两道，损失也有界 |
+| 链接暗号 | `CLAIM_CODE` | 扫路径的爬虫。不挡转发 |
+| 限流 | —— | 20 次请求/小时（防猜暗号）、3 次成功开户/小时（防刷号），分开计数 |
+
+> 两个计数必须分开：只统计成功开户的那个不会因为家长自己填错而把他锁在门外，
+> 而只有它又拦不住暗号爆破。
+
+**`/setup/<token>` 是家长唯一需要存的地址**，`invite.sh` 发出去的也是它
+（`/join/<token>` 是机器入口，点开直接进）。它做三件事：
+
+1. 按 UA 分别给安卓 / iOS / 微信内的「加到手机桌面」步骤；
+2. 显示专属链接让家长自己存好；
+3. **检测到是从桌面图标启动的，立刻转去 `/join/<token>`**。
+
+第 3 条是必需的，不是优化：**iOS 上加到桌面的网页有一套独立于 Safari 的存储**，
+Safari 里的登录 cookie 带不过去；安卓上家长也可能清掉浏览器数据。每次从桌面启动
+都重走一遍 magic link，登录状态就永远不会丢。用阻塞式内联脚本判断而不是
+`useEffect`，否则每次启动都会先闪一下说明页。
+
+PWA 的其余约束见《试用分发方案》§6.3（每家一份 manifest、service worker 刻意不做
+缓存、`apple-mobile-web-app-capable` 要手写补）。
 
 #### 数据隔离的四条规则
 
@@ -743,6 +777,9 @@ APP_PASSWORD=                 # 全站共享口令
 SESSION_SECRET=               # 会话签名密钥，≥16 字符。留空时 deploy.sh 自动生成并写回
                               # 换掉它 = 所有人被登出
 
+CLAIM_LIMIT=0                 # 自助领取的家庭上限。0 = 关闭（默认），见 §3.0
+CLAIM_CODE=                   # 领取链接里的暗号：/claim?c=<这里>。改掉即作废群里那条链接
+
 DETECT_MODE=none              # none | vlm
 VLM_BASE_URL=
 VLM_API_KEY=
@@ -869,7 +906,7 @@ pnpm test     # 30 条断言
 | 9 | 接入自动检出 | `9726103` |
 
 其后的改动：训练信号落库 `887b510`、PDF 排版三处修复 `e62893a`、答案改可选 `43aa95e`、
-组卷与点选修复 `6403862`、鉴权 `ebfaa52`。
+组卷与点选修复 `6403862`、鉴权 `ebfaa52`、上 HTTPS `3124834`。
 
 ---
 
@@ -882,9 +919,10 @@ pnpm test     # 30 条断言
 | **T3** | **拿真实作业照片复测检出** | 1 小时 | **最先做**。现在所有检出结论都建立在一张合成图上 |
 | T4 | 本地版面模型（DocLayout-YOLO / PP-Structure）对照测试 | 半天 | T3 之后 |
 | ~~T9b~~ | ~~按家庭隔离数据~~ | 1–2 天 | ✅ 已完成，见 §3.0 |
-| ~~T7~~ | ~~合规字段~~ | 半天 | ✅ 列已加、软删除已接。**同意流程的 UI 还没做** |
+| ~~T7~~ | ~~合规字段~~ | 半天 | ✅ 列已加、软删除已接 |
 | ~~T11~~ | ~~上 TLS~~ | 半天 | ✅ 已完成 |
-| ~~T12~~ | ~~监护人同意 UI~~ | 半天 | ✅ 已完成，见 §3.0 |
+| ~~T12~~ | ~~监护人同意 UI~~ | —— | ❌ **已撤销**。拦路的同意页去掉了，改成不拦路的 `/about` 数据说明 |
+| ~~T14~~ | ~~自助领取 + 加到手机桌面~~ | 1 天 | ✅ 已完成，见 §3.0 |
 | T13 | 原图到期清理任务（按 `capture.retention_until`） | 半天 | 不急，但列已加好 |
 | T5 | 框住纸上的答案区（零打字补答案） | 半天 | 看 T1 之后家长实际怎么用 |
 | T6 | `correction` 表 + 判定可追溯 | 1 天 | **接批改模型之前** |

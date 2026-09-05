@@ -9,11 +9,9 @@ export const assetUrl = (path: string) => `${BASE}${path}`;
  *  记住当前位置，否则页面会卡在"加载中…"或弹一个看不懂的错误。 */
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(apiUrl(path), init);
-  if (typeof window !== "undefined" && (res.status === 401 || res.status === 403)) {
+  if (res.status === 401 && typeof window !== "undefined") {
     const here = window.location.pathname.slice(BASE.length) + window.location.search;
-    const to =
-      res.status === 403 ? "/consent" : `/login?next=${encodeURIComponent(here)}`;
-    window.location.href = apiUrl(to);
+    window.location.href = apiUrl(`/login?next=${encodeURIComponent(here)}`);
     // 让调用方的 await 永远不返回，避免它继续用一个空响应渲染
     await new Promise(() => {});
   }

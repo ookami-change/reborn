@@ -31,6 +31,8 @@ export const account = pgTable("account", {
   /** owner 账号走口令登录，其余走 magic link */
   isOwner: boolean("is_owner").notNull().default(false),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  /** 非空 = 群链接自助领取的（方案 B），空 = 我手动建的。清理名额时要靠它分辨 */
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
   /** 软删除（T7）。合规要求可删除，且要能恢复误删 */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

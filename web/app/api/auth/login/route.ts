@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { POLICY_VERSION, checkPassword, issueToken, sessionCookie } from "@/lib/auth";
+import { checkPassword, issueToken, sessionCookie } from "@/lib/auth";
 import { ownerAccountId } from "@/lib/db/seed";
-import { hasConsented } from "@/lib/consent";
 
 export const runtime = "nodejs";
 
@@ -41,10 +40,7 @@ export async function POST(req: NextRequest) {
 
   fails.delete(ip);
   // 口令登录进的是 owner 账号（我自己家）；试用家长走 /join/<token>
-  const accountId = await ownerAccountId();
-  // 带上已同意的版本：换设备/重新登录不该被要求重新同意
-  const cv = (await hasConsented(accountId)) ? POLICY_VERSION : undefined;
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(sessionCookie(issueToken(accountId, cv, now)));
+  res.cookies.set(sessionCookie(issueToken(await ownerAccountId(), now)));
   return res;
 }

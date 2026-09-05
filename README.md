@@ -21,9 +21,10 @@ v0.1 全部 9 项开发任务已完成并上线。输入层处于 **L1**（自�
 | A4 复习卷 PDF + 回收二维码 | ✅ |
 | 扫码逐题录对错 | ✅ |
 | 自动判对错（L2） | ❌ 未开始 |
-| 登录（全站单口令） | ✅ |
-| 按家庭隔离数据（magic link） | ✅ |
+| 登录（口令 / magic link） | ✅ |
+| 按家庭隔离数据 | ✅ |
 | HTTPS | ✅ Let's Encrypt 自动续期 |
+| 自助领取 + 加到手机桌面（PWA） | ✅ |
 
 ---
 
@@ -40,7 +41,7 @@ pnpm --dir web dev
 
 ### ⚠️ 字体文件不在仓库里
 
-`web/assets/NotoSansSC-Regular.otf`（7.9MB）被 `.gitignore` 排除了。**缺了它前面一切正常，一点「生成复习卷」就报文件不存在**——`lib/pdf.ts` 的 `cjkFont()` 直接读这个路径。
+`web/assets/NotoSansSC-Regular.otf`（7.9MB）被 `.gitignore` 排除了。**缺了它前面一切正常，一点「生成复习卷」就报文件不存在**——`lib/pdf.ts` 的 `cjkFont()` 直接读这个路径。`scripts/make-icons.mjs` 也读它，但图标产物已提交进仓库，平时不用跑。
 
 自行下载放进去：
 
@@ -64,6 +65,18 @@ ssh root@<host> "cd /opt/reborn && bash deploy/deploy.sh"
 
 `deploy.sh` 会建 Postgres 容器（不映射公网端口）、应用 `drizzle/*.sql`、重建应用镜像、校验必填环境变量。服务器上需要 `/opt/reborn/.env.server`（`chmod 600`）。
 
+### 发给试用家长
+
+```bash
+bash deploy/invite.sh group          # 发家长群的自助领取链接（需先设 CLAIM_LIMIT / CLAIM_CODE）
+bash deploy/invite.sh                # 看谁领了、各自多少道错题
+bash deploy/invite.sh add "小明家"    # 单独给某一家生成链接
+bash deploy/invite.sh revoke "小明家" # 换掉 token，旧链接立刻失效
+```
+
+发出去的是 `/setup/<token>`：这一页会教家长把应用加到手机桌面，并让他自己存一份链接。
+详见《试用分发方案》§六。
+
 ---
 
 ## 目录
@@ -84,8 +97,9 @@ ssh root@<host> "cd /opt/reborn && bash deploy/deploy.sh"
     ├── components/            MarkCanvas 圈题画布、MaskEditor 遮罩编辑
     ├── lib/                   db / storage / leitner / pdf / detect
     ├── drizzle/               建表 SQL
+    ├── public/                桌面图标与空 service worker（PWA 安装用）
     ├── deploy/deploy.sh       服务器部署脚本
-    └── scripts/               COS / PG 探测、Leitner 单测
+    └── scripts/               COS / PG 探测、单测、邀请链接、生成图标
 ```
 
 ---

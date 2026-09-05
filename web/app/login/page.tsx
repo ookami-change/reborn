@@ -66,9 +66,6 @@ function LoginForm() {
       </button>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <p className="max-w-xs text-center text-xs text-neutral-400">
-        当前是 http 明文传输，口令挡得住误入的人，挡不住同网络的嗅探。
-      </p>
     </form>
   );
 }
