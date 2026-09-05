@@ -297,8 +297,8 @@ POST /api/auth/logout
   res: { ok: true }        + 清除 cookie
 
 GET  /join/:token
-  302 → 首页 + Set-Cookie（绑定该家庭的账号）
-  token 无效时 302 → /login，不区分"不存在"和"已撤销"，也不回显 token
+  307 → 首页 + Set-Cookie（绑定该家庭的账号）
+  token 无效时 307 → /login，不区分"不存在"和"已撤销"，也不回显 token
 ```
 
 会话 token 是 `<payload>.<HMAC-SHA256>`，payload 是 `{ aid, exp }`，有效期 30 天
@@ -311,6 +311,12 @@ proxy **无条件先删掉外部传进来的同名头**，所以客户端伪造�
 
 `currentAccountId()` 拿不到值时**抛异常，不降级**。走到那里还没有值只可能是
 proxy 的 matcher 漏了路径，默默降级就等于「看所有人的数据」。
+
+> **路由处理函数里做跳转必须发相对 `Location`。** `new URL(req.url)` 的 host 在容器里
+> 是 `0.0.0.0:3000` 且 basePath 已被剥掉；`req.nextUrl` 在路由处理函数里同样不认
+> `x-forwarded-host`（只有 `proxy.ts` 里的那个认）。两条路拼出来的都是
+> `https://0.0.0.0:3000/`。`/join/:token` 曾一直是这样，**邀请链接点开直接进死胡同**，
+> 线上实测才发现。相对路径由浏览器按当前地址补全，basePath 用 `apiUrl()` 手动带上。
 
 #### 自助领取与专属入口（T14）
 

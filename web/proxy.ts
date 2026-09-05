@@ -17,8 +17,11 @@ import { ACCOUNT_HEADER, cookieName, verifyToken } from "@/lib/auth";
  *
  *  /claim 与 /setup 是自助领取的入口（《试用分发方案》§六 方案 B）：
  *  家长第一次点开时当然还没有会话，拦下来就没人能领了。
- *  /setup/<token> 只凭那条不可猜的 token 显示"加到桌面"的说明，不读任何错题数据。 */
-const PUBLIC = ["/login", "/api/auth/login", "/join", "/claim", "/api/claim", "/setup"];
+ *  /setup/<token> 只凭那条不可猜的 token 显示"加到桌面"的说明，不读任何错题数据。
+ *
+ *  /about 是数据说明，领取页会链过去。它不含任何用户数据，拦下来只会让
+ *  还没登录的家长在决定要不要用之前看不到「照片会发给谁」。 */
+const PUBLIC = ["/login", "/api/auth/login", "/join", "/claim", "/api/claim", "/setup", "/about"];
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
